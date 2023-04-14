@@ -1,0 +1,121 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "CVL-desktop laboratory"
+Parameters:
+  AvailabilityZones:
+    Description: "Availability zone list"
+    Type: CommaDelimitedList
+    Default: "ap-southeast-2a,ap-southeast-2b,ap-southeast-2c"
+  CloudConfigPassword:
+    Description: Optional: Set the Default user (ubuntu) password
+    Type: String
+    Default: ""
+    NoEcho: true
+  ImageId:
+    Description: "AMI image id"
+    Type: String
+  InstanceType:
+    Description: "EC2 instance type"
+    Type: String
+    Default: g4dn.xlarge
+    AllowedValues: ["g4dn.xlarge"]
+    ConstraintDescription: "must be a valid EC2 instance type."
+  KeyName:
+    Description: "Name of an existing EC2 KeyPair to enable SSH access to the instance"
+    Type: "AWS::EC2::KeyPair::KeyName"
+    ConstraintDescription: "must be the name of an existing EC2 KeyPair."
+  PublicResourceAccountID:
+    Description: "Account ID of Virtual Laboratory public resources"
+    Type: String
+    Default: "381427642830"
+  SubnetId:
+    Type: String
+    Default: AWS::NoValue
+  VpcId:
+    Type: String
+    Default: AWS::NoValue
+  ASGDesiredCapacity:
+    Type: Number
+    Description: "Auto Scale Group desired capacity (i.e., Number of VM instances)"
+    Default: 1
+
+Conditions:
+  IsPublicAccount: !Equals
+    - !Ref AWS::AccountId
+    - !Ref PublicResourceAccountID
+  IsUserPasswordEmpty: !Equals [!Ref CloudConfigPassword, ""]
+
+Resources:
+  AutoScaleGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones: !Ref AvailabilityZones
+      DesiredCapacity: !Ref ASGDesiredCapacity
+      LaunchTemplate:
+        LaunchTemplateId: !Ref EC2LaunchTemplate
+        Version: !GetAtt [EC2LaunchTemplate, LatestVersionNumber]
+      MaxSize: 20
+      MinSize: 1
+
+  EC2LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${AWS::StackName}-launch-template"
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: 100
+        ImageId: {"Ref": "ImageId"}
+        InstanceMarketOptions:
+          MarketType: spot
+          SpotOptions:
+            SpotInstanceType: one-time
+        InstanceType: { "Ref" : "InstanceType" }
+        KeyName: { "Ref" : "KeyName" }
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            Groups:
+              - !GetAtt InstanceSecurityGroup.GroupId
+            SubnetId: !Ref SubnetId
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - { Key: sydney.edu.au/ResTek/ansibleGroups, Value: "cvl,desktop,usyd" }
+              - { Key: sydney.edu.au/ResTek/owner, Value: "dean.taylor@sydney.edu.au" }
+              - { Key: sydney.edu.au/ResTek/environment, Value: "development" }
+        UserData:
+          Fn::Base64: !Sub
+            - |
+              #cloud-config
+              bootcmd:
+                - echo 'APT::Periodic::Update-Package-Lists "0";' >/etc/apt/apt.conf.d/99auto-upgrades
+                - echo 'APT::Periodic::Download-Upgradeable-Packages "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
+                - echo 'APT::Periodic::AutocleanInterval "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
+                - echo 'APT::Periodic::Unattended-Upgrade "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
+              chpasswd: ${Password}
+              keyboard:
+                layout: us
+              locale: en_AU.UTF-8
+              package_update: true
+              ssh_authorized_keys: []
+              ssh_pwauth: ${SshPwAuth}
+              timezone: Australia/Sydney
+            - SshPwAuth: !If [IsUserPasswordEmpty, "false", "true"]
+              Password: !If
+                - IsUserPasswordEmpty
+                - "{}"
+                - !Sub
+                    - "{expire: true, users: [{name: ubuntu, password: ${Password}, type: text}]}"
+                    - Password: !Ref CloudConfigPassword
+
+  InstanceSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Enable SSH access via port 22"
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp: "0.0.0.0/0"
+      VpcId: !Ref VpcId
