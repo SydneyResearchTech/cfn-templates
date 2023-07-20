@@ -1,0 +1,386 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AIS XNAT Database
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Parent stacks
+      Parameters:
+      - ParentVPCStack
+    - Label:
+        default: Database parameters
+      Parameters:
+      - DBEngineVersion
+      - DBName
+      - DBUsername
+      - DBInstanceClass
+      - DBPort
+    - Label:
+        default: Tag
+      Parameters:
+      - Environment
+      - Lifecycle
+      - Program
+      - Faculty
+      - Project
+      - Application
+      - SupportLevel
+    - Label:
+        default: Misc
+      Parameters:
+      - DXCInstanceAlarmTopic
+      - ParentAlertStack
+Parameters:
+  ParentVPCStack:
+    Default: ictresearchawsvpc
+    Description: Stack name of parent VPC stack template
+    Type: String
+  Environment:
+    Default: Prod
+    Description: Must choose the correct one based on AWS account 
+    Type: String
+    AllowedValues:
+    - Dev
+    - Prod
+    ConstraintDescription: must specify D, T or P.
+  Lifecycle:
+    Default: Production
+    Description: This is the application lifecycle for tagging
+    Type: String
+    AllowedValues:
+    - Development
+    - Test
+    - Staging
+    - Production
+    ConstraintDescription: must specify Development, Test, Staging or Production
+  Program:
+    Default: Research
+    Type: String
+  Faculty:
+    Default: Shared
+    Type: String
+  Project:
+    Default: AIS
+    Type: String
+  Application:
+    Default: XNAT
+    Type: String
+  SupportLevel:
+    Default: Gold
+    Type: String
+  DBEngineVersion:
+    Default: 12.8
+    Description: Aurora Postgres database dngine version
+    Type: String
+    AllowedValues:
+    - 11.13
+    - 12.8
+  DBName:
+    Default: xnat
+    Description: Database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: "^[a-zA-Z]+[0-9a-zA-Z_]*$" 
+    ConstraintDescription: Must start with a letter. Only numbers, letters, and _ accepted. max length 64 characters 
+  DBUsername:
+    Default: tomcat
+    Description: Database master username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: "^[a-zA-Z]+[0-9a-zA-Z_]*$"
+    ConstraintDescription: Must start with a letter. Only numbers, letters, and _ accepted. max length 16 characters
+  DBInstanceClass:
+    Default: db.t3.large
+    Description: The database instance type
+    Type: String
+    AllowedValues:
+    - db.t3.medium
+    - db.t3.large
+    - db.r6g.large
+  DBPort:
+    Default: 5432
+    Description: TCP/IP Port for the database
+    Type: Number
+  DXCInstanceAlarmTopic:
+    Description: SNS Topic for Instances Alarms.
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /DXC/Instance/AlarmTopic
+  ParentAlertStack:
+    Description: Optional but recommended stack name of parent alert stack based on
+      operations/alert.yaml template.
+    Type: String
+    Default: ''
+Mappings: 
+  PrivateSubnets: 
+    Prod:
+      apse2a: 10.86.224.0/21
+      apse2b: 10.86.232.0/21
+      apse2c: 10.86.240.0/21
+    Dev:
+      apse2a: 10.86.13.128/25
+      apse2b: 10.86.14.128/25
+      apse2c: 10.86.15.128/25
+Conditions:
+  IsProd: !Equals [!Ref Environment, 'Prod']
+  HasAlertTopic: !Not [!Equals [!Ref ParentAlertStack, '']]
+Resources:
+  DBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: !Sub '${AWS::StackName} Database Security Group'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVPCStack}-VPC'
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: !Ref DBPort
+        ToPort: !Ref DBPort
+        CidrIp: !FindInMap [PrivateSubnets, !Ref Environment, apse2a]
+        Description: Aurora PostgreSQL Port
+      - IpProtocol: tcp
+        FromPort: !Ref DBPort
+        ToPort: !Ref DBPort
+        CidrIp: !FindInMap [PrivateSubnets, !Ref Environment, apse2b]
+        Description: Aurora PostgreSQL Port
+      - IpProtocol: tcp
+        FromPort: !Ref DBPort
+        ToPort: !Ref DBPort
+        CidrIp: !FindInMap [PrivateSubnets, !Ref Environment, apse2c]
+        Description: Aurora PostgreSQL Port
+      Tags:
+      - Key: Project
+        Value: !Ref Project
+      - Key: Application
+        Value: !Ref Application
+      - Key: Program
+        Value: !Ref Program
+      - Key: Environment
+        Value: !Ref Environment
+      - Key: Lifecycle
+        Value: !Ref Lifecycle
+      - Key: Faculty
+        Value: !Ref Faculty
+      - Key: Support
+        Value: !Ref SupportLevel
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-DB-SG
+  DBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: !Sub '${AWS::StackName} Database Subnet Group'
+      SubnetIds:
+      - 'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetAPrivate'
+      - 'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetBPrivate'
+      - 'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetCPrivate'
+      Tags:
+      - Key: Project
+        Value: !Ref Project
+      - Key: Application
+        Value: !Ref Application
+      - Key: Program
+        Value: !Ref Program
+      - Key: Environment
+        Value: !Ref Environment
+      - Key: Lifecycle
+        Value: !Ref Lifecycle
+      - Key: Faculty
+        Value: !Ref Faculty
+      - Key: Support
+        Value: !Ref SupportLevel
+      - Key: Name
+        Value: !Sub ${AWS::StackName} DBSubnetGroup
+  DBCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-postgresql
+      EngineVersion: !Ref DBEngineVersion
+      DatabaseName: !Ref DBName
+      Port: !Ref DBPort
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Sub '{{resolve:ssm-secure:/${Project}/${Application}/${Environment}/Db/Password:1}}'
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VpcSecurityGroupIds: 
+      - !Ref DBSecurityGroup
+      BackupRetentionPeriod: !If [IsProd, 35, 7]
+      StorageEncrypted: true
+      EnableCloudwatchLogsExports:
+      - postgresql
+      Tags:
+      - Key: Project
+        Value: !Ref Project
+      - Key: Application
+        Value: !Ref Application
+      - Key: Program
+        Value: !Ref Program
+      - Key: Environment
+        Value: !Ref Environment
+      - Key: Lifecycle
+        Value: !Ref Lifecycle
+      - Key: Faculty
+        Value: !Ref Faculty
+      - Key: Support
+        Value: !Ref SupportLevel
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-DB 
+  DBInstanceA:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: !Ref DBInstanceClass
+      DBClusterIdentifier: !Ref DBCluster  
+      Engine: aurora-postgresql
+      EngineVersion: !Ref DBEngineVersion
+      AutoMinorVersionUpgrade: true
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      PubliclyAccessible: false
+      Tags:
+      - Key: Project
+        Value: !Ref Project
+      - Key: Application
+        Value: !Ref Application
+      - Key: Program
+        Value: !Ref Program
+      - Key: Environment
+        Value: !Ref Environment
+      - Key: Lifecycle
+        Value: !Ref Lifecycle
+      - Key: Faculty
+        Value: !Ref Faculty
+      - Key: Support
+        Value: !Ref SupportLevel
+      - Key: Name
+        Value: !Sub '${AWS::StackName} Aurora Postgresql DB'
+  DatabaseClusterCPUUtilizationTooHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Average database cluster CPU utilization over last 10 minutes
+        higher than 80%
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Statistic: Average
+      Period: 600
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 80
+      AlarmActions:
+      - Ref: DXCInstanceAlarmTopic
+      - Fn::If:
+        - HasAlertTopic
+        - Fn::ImportValue:
+            Fn::Sub: ${ParentAlertStack}-TopicARN
+        - Ref: AWS::NoValue
+      Dimensions:
+      - Name: DBClusterIdentifier
+        Value:
+          Ref: DBCluster
+  DatabaseClusterDiskQueueDepthTooHighAlarm:
+    Condition: HasAlertTopic
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Average database cluster disk queue depth over last 10 minutes
+        higher than 64, performance may suffer
+      Namespace: AWS/RDS
+      MetricName: DiskQueueDepth
+      Statistic: Average
+      Period: 600
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 64
+      AlarmActions:
+      - Fn::ImportValue:
+          Fn::Sub: ${ParentAlertStack}-TopicARN
+      Dimensions:
+      - Name: DBClusterIdentifier
+        Value:
+          Ref: DBCluster
+  DatabaseClusterFreeableMemoryTooLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Average database cluster freeable memory over last 10 minutes
+        lower than 64 MB, performance may suffer
+      Namespace: AWS/RDS
+      MetricName: FreeableMemory
+      Statistic: Average
+      Period: 600
+      EvaluationPeriods: 1
+      ComparisonOperator: LessThanThreshold
+      Threshold: 67108864
+      AlarmActions:
+      - Ref: DXCInstanceAlarmTopic
+      - Fn::If:
+        - HasAlertTopic
+        - Fn::ImportValue:
+            Fn::Sub: ${ParentAlertStack}-TopicARN
+        - Ref: AWS::NoValue
+      Dimensions:
+      - Name: DBClusterIdentifier
+        Value:
+          Ref: DBCluster
+  DatabaseClusterFreeStorageSpaceTooLowAlarm:
+    Condition: HasAlertTopic
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Average database cluster free storage space over last 10 minutes
+        lower than 2 GB
+      Namespace: AWS/RDS
+      MetricName: FreeStorageSpace
+      Statistic: Average
+      Period: 600
+      EvaluationPeriods: 1
+      ComparisonOperator: LessThanThreshold
+      Threshold: 2147483648
+      AlarmActions:
+      - Fn::ImportValue:
+          Fn::Sub: ${ParentAlertStack}-TopicARN
+      Dimensions:
+      - Name: DBClusterIdentifier
+        Value:
+          Ref: DBCluster
+  DatabaseClusterFreeLocalStorageTooLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Average database cluster free Local storage over last 10 minutes
+        lower than 2 GB
+      Namespace: AWS/RDS
+      MetricName: FreeLocalStorage
+      Statistic: Average
+      Period: 600
+      EvaluationPeriods: 1
+      ComparisonOperator: LessThanThreshold
+      Threshold: 2147483648
+      AlarmActions:
+      - Ref: DXCInstanceAlarmTopic
+      - Fn::If:
+        - HasAlertTopic
+        - Fn::ImportValue:
+            Fn::Sub: ${ParentAlertStack}-TopicARN
+        - Ref: AWS::NoValue
+      Dimensions:
+      - Name: DBClusterIdentifier
+        Value:
+          Ref: DBCluster
+  DatabaseClusterSwapUsageTooHighAlarm:
+    Condition: HasAlertTopic
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Average database cluster swap usage over last 10 minutes higher
+        than 256 MB, performance may suffer
+      Namespace: AWS/RDS
+      MetricName: SwapUsage
+      Statistic: Average
+      Period: 600
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 268435456
+      AlarmActions:
+      - Fn::ImportValue:
+          Fn::Sub: ${ParentAlertStack}-TopicARN
+      Dimensions:
+      - Name: DBClusterIdentifier
+        Value:
+          Ref: DBCluster
+Outputs:
+  AuroraDBClusterEndpoint:
+    Description: Aurora Postgres DB cluster endpoint
+    Value: !GetAtt DBCluster.Endpoint.Address
