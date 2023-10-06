@@ -6,8 +6,8 @@ Parameters:
     Description: "Availability zone list"
     Type: CommaDelimitedList
     Default: "ap-southeast-2a,ap-southeast-2b,ap-southeast-2c"
-  CloudConfigPassword:
-    Description: Optional: Set the Default user (ubuntu) password
+  DefaultUserPassword:
+    Description: "Optional: Set the Default user (ubuntu) password"
     Type: String
     Default: ""
     NoEcho: true
@@ -38,12 +38,18 @@ Parameters:
     Type: Number
     Description: "Auto Scale Group desired capacity (i.e., Number of VM instances)"
     Default: 1
+  AuthorizedKeys:
+    Type: CommaDelimitedList
+    Description: "SSH authorized keys"
+    Default: ""
 
 Conditions:
   IsPublicAccount: !Equals
     - !Ref AWS::AccountId
     - !Ref PublicResourceAccountID
-  IsUserPasswordEmpty: !Equals [!Ref CloudConfigPassword, ""]
+  IsUserPasswordEmpty: !Equals [!Ref DefaultUserPassword, ""]
+
+Outputs: {}
 
 Resources:
   AutoScaleGroup:
@@ -73,6 +79,10 @@ Resources:
             SpotInstanceType: one-time
         InstanceType: { "Ref" : "InstanceType" }
         KeyName: { "Ref" : "KeyName" }
+        # IMDSv2 is required
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
         NetworkInterfaces:
           - DeviceIndex: 0
             Groups:
@@ -107,7 +117,7 @@ Resources:
                 - "{}"
                 - !Sub
                     - "{expire: true, users: [{name: ubuntu, password: ${Password}, type: text}]}"
-                    - Password: !Ref CloudConfigPassword
+                    - Password: !Ref DefaultUserPassword
 
   InstanceSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"

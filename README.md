@@ -1,7 +1,33 @@
 # cfn-templates
+
 Amazon CloudFormation templates
 
-## CVL desktop
+## Desktop
+
+```bash
+STACK_NAME='##########'
+
+aws cloudformation create-stack --stack-name ${STACK_NAME} \
+--template-body file://./cvl-desktop-lab.cfn.yml \
+--parameters file://./tmp/desktop-development.param.cfn.json
+```
+
+```bash
+aws ec2 describe-subnets \
+  --filters 'Name=map-public-ip-on-launch,Values=true' \
+  --query 'reverse(sort_by(Subnets,&AvailableIpAddressCount))[0].{SubnetId: SubnetId, VpcId: VpcId, AvailabilityZone: AvailabilityZone}'
+```
+
+```json
+[
+  {"ParameterKey": "DefaultUserPassword", "ParameterValue": "##########"},
+  {"ParameterKey": "ImageId", "ParameterValue": "ami-0b4387dd850b3a1ef"},
+  {"ParameterKey": "KeyName", "ParameterValue": "##########"},
+  {"ParameterKey": "AvailabilityZones", "ParameterValue": "##########"},
+  {"ParameterKey": "SubnetId", "ParameterValue": "##########"},
+  {"ParameterKey": "VpcId", "ParameterValue": "##########"}
+]
+```
 
 ```bash
 STACK_NAME='cvl-desktop-lab'
