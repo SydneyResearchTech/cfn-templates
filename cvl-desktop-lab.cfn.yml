@@ -30,10 +30,10 @@ Parameters:
     Default: "381427642830"
   SubnetId:
     Type: String
-    Default: AWS::NoValue
+    Default: ""
   VpcId:
     Type: String
-    Default: AWS::NoValue
+    Default: ""
   ASGDesiredCapacity:
     Type: Number
     Description: "Auto Scale Group desired capacity (i.e., Number of VM instances)"
@@ -42,14 +42,27 @@ Parameters:
     Type: CommaDelimitedList
     Description: "SSH authorized keys"
     Default: ""
+  InstanceSecurityGroups:
+    Type: CommaDelimitedList
+    Description: Security groups applied to each instance
+    Default: ""
 
 Conditions:
+  #CreateInstanceProfile: !Equals [!Ref InstanceSecurityGroups, ""]
+  CreateInstanceProfile: !Equals ["1", "2"]
+  CreateVpc: !Equals [!Ref VpcId, ""]
   IsPublicAccount: !Equals
     - !Ref AWS::AccountId
     - !Ref PublicResourceAccountID
   IsUserPasswordEmpty: !Equals [!Ref DefaultUserPassword, ""]
 
-Outputs: {}
+Outputs:
+  RoleArn:
+    Description: EC2 instance role ARN
+    Value: !GetAtt InstanceRole.Arn
+  SecurityGroupId:
+    Description: Security group ID applied to instances
+    Value: !GetAtt InstanceSecurityGroup.GroupId
 
 Resources:
   AutoScaleGroup:
@@ -60,7 +73,7 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref EC2LaunchTemplate
         Version: !GetAtt [EC2LaunchTemplate, LatestVersionNumber]
-      MaxSize: 20
+      MaxSize: 30
       MinSize: 1
 
   EC2LaunchTemplate:
@@ -72,14 +85,20 @@ Resources:
           - DeviceName: /dev/sda1
             Ebs:
               VolumeSize: 100
-        ImageId: {"Ref": "ImageId"}
+        #IamInstanceProfile: !If
+        #  - CreateInstanceProfile
+        #  - {Arn: !GetAtt InstanceProfile.Arn}
+        #  - !Ref AWS::NoValue
+        #IamInstanceProfile: !Ref AWS::NoValue
+        IamInstanceProfile: {Arn: !GetAtt InstanceProfile.Arn}
+        ImageId: !Ref ImageId
         InstanceMarketOptions:
           MarketType: spot
           SpotOptions:
             SpotInstanceType: one-time
-        InstanceType: { "Ref" : "InstanceType" }
-        KeyName: { "Ref" : "KeyName" }
-        # IMDSv2 is required
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyName
+        # IMDSv2 only (disable IMDSv1)
         MetadataOptions:
           HttpEndpoint: enabled
           HttpTokens: required
@@ -91,9 +110,9 @@ Resources:
         TagSpecifications:
           - ResourceType: instance
             Tags:
-              - { Key: sydney.edu.au/ResTek/ansibleGroups, Value: "cvl,desktop,usyd" }
-              - { Key: sydney.edu.au/ResTek/owner, Value: "dean.taylor@sydney.edu.au" }
-              - { Key: sydney.edu.au/ResTek/environment, Value: "development" }
+              - {Key: sydney.edu.au/resTek/ansibleGroups, Value: "cvl,desktop,usyd"}
+              - {Key: sydney.edu.au/resTek/createdBy, Value: "dean.taylor@sydney.edu.au"}
+              - {Key: sydney.edu.au/resTek/environment, Value: "development"}
         UserData:
           Fn::Base64: !Sub
             - |
@@ -108,6 +127,8 @@ Resources:
                 layout: us
               locale: en_AU.UTF-8
               package_update: true
+              package_upgrade: true
+              package_reboot_if_required: true
               ssh_authorized_keys: []
               ssh_pwauth: ${SshPwAuth}
               timezone: Australia/Sydney
@@ -119,6 +140,35 @@ Resources:
                     - "{expire: true, users: [{name: ubuntu, password: ${Password}, type: text}]}"
                     - Password: !Ref DefaultUserPassword
 
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    #Condition: CreateInstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref InstanceRole
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: {Service: [ec2.amazonaws.com]}
+            Action: ["sts:AssumeRole"]
+      Description: Instance access to resources
+      Policies:
+        - PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:ListBucket"
+                  - "s3:GetBucketLocation"
+                Resource: "arn:aws:s3:::"
+          PolicyName: root
+
   InstanceSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
@@ -128,4 +178,22 @@ Resources:
           FromPort: "22"
           ToPort: "22"
           CidrIp: "0.0.0.0/0"
-      VpcId: !Ref VpcId
+      VpcId: !If [CreateVpc, !Ref Vpc, !Ref VpcId]
+
+  InterIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: allow instances to connect
+      GroupId: !GetAtt InstanceSecurityGroup.GroupId
+      IpProtocol: -1
+      SourceSecurityGroupId: !GetAtt InstanceSecurityGroup.GroupId
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Condition: CreateVpc
+    Properties:
+      CidrBlock: 172.27.0.0/24
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - {Key: "sydney.edu.au/resTek/createdBy", Value: "dean.taylor@sydney.edu.au"}
