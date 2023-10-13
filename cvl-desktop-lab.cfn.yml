@@ -4,7 +4,7 @@ Description: "CVL-desktop laboratory"
 Parameters:
   AvailabilityZones:
     Description: "Availability zone list"
-    Type: CommaDelimitedList
+    Type: "List<AWS::EC2::AvailabilityZone::Name>"
     Default: "ap-southeast-2a,ap-southeast-2b,ap-southeast-2c"
   DefaultUserPassword:
     Description: "Optional: Set the Default user (ubuntu) password"
@@ -13,7 +13,7 @@ Parameters:
     NoEcho: true
   ImageId:
     Description: "AMI image id"
-    Type: String
+    Type: "AWS::EC2::Image::Id"
   InstanceType:
     Description: "EC2 instance type"
     Type: String
@@ -32,7 +32,7 @@ Parameters:
     Type: String
     Default: ""
   VpcId:
-    Type: String
+    Type: "AWS::EC2::VPC::Id"
     Default: ""
   ASGDesiredCapacity:
     Type: Number
@@ -57,6 +57,9 @@ Conditions:
   IsUserPasswordEmpty: !Equals [!Ref DefaultUserPassword, ""]
 
 Outputs:
+  InstanceProfileArn:
+    Description: EC2 instance profile ARN
+    Value: !GetAtt InstanceProfile.Arn
   RoleArn:
     Description: EC2 instance role ARN
     Value: !GetAtt InstanceRole.Arn
@@ -132,6 +135,18 @@ Resources:
               ssh_authorized_keys: []
               ssh_pwauth: ${SshPwAuth}
               timezone: Australia/Sydney
+              write_files:
+                - content: |
+                    [profile default]
+                    credential_source=Ec2InstanceMetadata
+                    region=ap-southeast-2
+                    output=json
+                  path: /etc/aws_config
+                  permission: '0644'
+               - content: |
+                   AWS_CONFIG_FILE="/etc/aws_config"
+                  path: /etc/environment
+                  append: true
             - SshPwAuth: !If [IsUserPasswordEmpty, "false", "true"]
               Password: !If
                 - IsUserPasswordEmpty
@@ -155,24 +170,37 @@ Resources:
         Version: 2012-10-17
         Statement:
           - Effect: Allow
-            Principal: {Service: [ec2.amazonaws.com]}
+            Principal: {Service: ["ec2.amazonaws.com"]}
             Action: ["sts:AssumeRole"]
       Description: Instance access to resources
       Policies:
         - PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Effect: Allow
+              - Sid: AllowAccountLevelS3Actions
+                Effect: Allow
                 Action:
-                  - "s3:ListBucket"
                   - "s3:GetBucketLocation"
-                Resource: "arn:aws:s3:::"
+                  - "s3:GetAccountPublicAccessBlock"
+                  - "s3:ListAccessPoints"
+                  - "s3:ListAllMyBuckets"
+                Resource: "arn:aws:s3:::*"
+              - Sid: AllowListAndReadS3ActionOnMyBucket
+                Effect: Allow
+                Action:
+                  - "s3:Get*"
+                  - "s3:List*"
+                Resource:
+                  - "arn:aws:s3:::cvl-desktop-applications-x86-64"
+                  - "arn:aws:s3:::cvl-desktop-applications-x86-64/*"
+                  - "arn:aws:s3:::eresearch2023-2e7a2865"
+                  - "arn:aws:s3:::eresearch2023-2e7a2865/*"
           PolicyName: root
 
   InstanceSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
-      GroupDescription: "Enable SSH access via port 22"
+      GroupDescription: "Enable EC2 instance access"
       SecurityGroupIngress:
         - IpProtocol: "tcp"
           FromPort: "22"
