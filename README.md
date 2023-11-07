@@ -10,6 +10,8 @@ STACK_NAME='##########'
 aws cloudformation create-stack --stack-name ${STACK_NAME} \
 --template-body file://./cvl-desktop-lab.cfn.yml \
 --parameters file://./tmp/desktop-development.param.cfn.json
+
+aws cloudformation describe-stack-events --stack-name ${STACK_NAME}
 ```
 
 ```bash

@@ -77,7 +77,7 @@ Resources:
         LaunchTemplateId: !Ref EC2LaunchTemplate
         Version: !GetAtt [EC2LaunchTemplate, LatestVersionNumber]
       MaxSize: 30
-      MinSize: 1
+      MinSize: 0
 
   EC2LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -195,6 +195,13 @@ Resources:
                   - "arn:aws:s3:::cvl-desktop-applications-x86-64/*"
                   - "arn:aws:s3:::eresearch2023-2e7a2865"
                   - "arn:aws:s3:::eresearch2023-2e7a2865/*"
+              - Sid: AllObjectActions
+                Effect: Allow
+                Action:
+                  - "s3:*Object"
+                Resource:
+                  - "arn:aws:s3:::cvl-desktop-applications-x86-64/*"
+                  - "arn:aws:s3:::eresearch2023-2e7a2865/*"
           PolicyName: root
 
   InstanceSecurityGroup:
@@ -212,9 +219,21 @@ Resources:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       Description: allow instances to connect
-      GroupId: !GetAtt InstanceSecurityGroup.GroupId
+      FromPort: -1
+      GroupId: !Ref InstanceSecurityGroup
       IpProtocol: -1
-      SourceSecurityGroupId: !GetAtt InstanceSecurityGroup.GroupId
+      SourceSecurityGroupId: !Ref InstanceSecurityGroup
+      ToPort: -1
+
+  #InterEgress:
+  #  Type: AWS::EC2::SecurityGroupEgress
+  #  Properties:
+  #    Description: allow instances to connect
+  #    FromPort: -1
+  #    GroupId: !Ref InstanceSecurityGroup
+  #    IpProtocol: -1
+  #    DestinationSecurityGroupId: !Ref InstanceSecurityGroup
+  #    ToPort: -1
 
   Vpc:
     Type: AWS::EC2::VPC
