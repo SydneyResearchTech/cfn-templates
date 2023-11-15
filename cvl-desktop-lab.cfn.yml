@@ -46,6 +46,10 @@ Parameters:
     Type: CommaDelimitedList
     Description: Security groups applied to each instance
     Default: ""
+  InstanceMarketType:
+    Type: String
+    Default: "spot"
+    AllowedValues: ["capacity-block","spot"]
 
 Conditions:
   #CreateInstanceProfile: !Equals [!Ref InstanceSecurityGroups, ""]
@@ -55,6 +59,7 @@ Conditions:
     - !Ref AWS::AccountId
     - !Ref PublicResourceAccountID
   IsUserPasswordEmpty: !Equals [!Ref DefaultUserPassword, ""]
+  InstanceMarketTypeSpot: !Equals [!Ref InstanceMarketType, "spot"]
 
 Outputs:
   InstanceProfileArn:
@@ -76,7 +81,7 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref EC2LaunchTemplate
         Version: !GetAtt [EC2LaunchTemplate, LatestVersionNumber]
-      MaxSize: 30
+      MaxSize: 24
       MinSize: 0
 
   EC2LaunchTemplate:
@@ -96,9 +101,8 @@ Resources:
         IamInstanceProfile: {Arn: !GetAtt InstanceProfile.Arn}
         ImageId: !Ref ImageId
         InstanceMarketOptions:
-          MarketType: spot
-          SpotOptions:
-            SpotInstanceType: one-time
+          MarketType: !Ref InstanceMarketType
+          SpotOptions: !If [InstanceMarketTypeSpot, {SpotInstanceType: one-time}, {}]
         InstanceType: !Ref InstanceType
         KeyName: !Ref KeyName
         # IMDSv2 only (disable IMDSv1)
@@ -113,6 +117,7 @@ Resources:
         TagSpecifications:
           - ResourceType: instance
             Tags:
+              - {Key: "uni:billing:application", Value: "xxxx"}
               - {Key: sydney.edu.au/resTek/ansibleGroups, Value: "cvl,desktop,usyd"}
               - {Key: sydney.edu.au/resTek/createdBy, Value: "dean.taylor@sydney.edu.au"}
               - {Key: sydney.edu.au/resTek/environment, Value: "development"}
@@ -121,10 +126,10 @@ Resources:
             - |
               #cloud-config
               bootcmd:
-                - echo 'APT::Periodic::Update-Package-Lists "0";' >/etc/apt/apt.conf.d/99auto-upgrades
-                - echo 'APT::Periodic::Download-Upgradeable-Packages "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
-                - echo 'APT::Periodic::AutocleanInterval "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
-                - echo 'APT::Periodic::Unattended-Upgrade "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
+              - echo 'APT::Periodic::Update-Package-Lists "0";' >/etc/apt/apt.conf.d/99auto-upgrades
+              - echo 'APT::Periodic::Download-Upgradeable-Packages "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
+              - echo 'APT::Periodic::AutocleanInterval "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
+              - echo 'APT::Periodic::Unattended-Upgrade "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
               chpasswd: ${Password}
               keyboard:
                 layout: us
@@ -136,17 +141,17 @@ Resources:
               ssh_pwauth: ${SshPwAuth}
               timezone: Australia/Sydney
               write_files:
-                - content: |
-                    [profile default]
-                    credential_source=Ec2InstanceMetadata
-                    region=ap-southeast-2
-                    output=json
-                  path: /etc/aws_config
-                  permission: '0644'
-               - content: |
-                   AWS_CONFIG_FILE="/etc/aws_config"
-                  path: /etc/environment
-                  append: true
+              - content: |
+                  [profile default]
+                  credential_source=Ec2InstanceMetadata
+                  region=ap-southeast-2
+                  output=json
+                path: /etc/aws_config
+                permission: '0644'
+              - content: |
+                  AWS_CONFIG_FILE="/etc/aws_config"
+                path: /etc/environment
+                append: true
             - SshPwAuth: !If [IsUserPasswordEmpty, "false", "true"]
               Password: !If
                 - IsUserPasswordEmpty
