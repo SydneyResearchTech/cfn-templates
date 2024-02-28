@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "CVL-desktop laboratory"
+Description: "Virtual desktop launch template"
 Parameters:
   AvailabilityZones:
     Description: "Availability zone list"
@@ -46,6 +46,10 @@ Parameters:
     Type: CommaDelimitedList
     Description: Security groups applied to each instance
     Default: ""
+  InstanceMarketType:
+    Type: String
+    Default: "spot"
+    AllowedValues: ["capacity-block","spot"]
 
 Conditions:
   #CreateInstanceProfile: !Equals [!Ref InstanceSecurityGroups, ""]
@@ -69,33 +73,22 @@ Outputs:
     Value: !GetAtt InstanceSecurityGroup.GroupId
 
 Resources:
-  AutoScaleGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    Properties:
-      AvailabilityZones: !Ref AvailabilityZones
-      DesiredCapacity: !Ref ASGDesiredCapacity
-      LaunchTemplate:
-        LaunchTemplateId: !Ref EC2LaunchTemplate
-        Version: !GetAtt [EC2LaunchTemplate, LatestVersionNumber]
-      MaxSize: 24
-      MinSize: 0
-      Tags:
-        - {Key: "uni:billing:application", Value: "xxxx", PropagateAtLaunch: true}
-
   EC2LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: !Sub "${AWS::StackName}-launch-template"
+      LaunchTemplateName: !Sub "${AWS::StackName}"
       LaunchTemplateData:
         BlockDeviceMappings:
           - DeviceName: /dev/sda1
             Ebs:
-              VolumeSize: 100
+              VolumeSize: 256
+        #IamInstanceProfile: !If
+        #  - CreateInstanceProfile
+        #  - {Arn: !GetAtt InstanceProfile.Arn}
+        #  - !Ref AWS::NoValue
+        #IamInstanceProfile: !Ref AWS::NoValue
         IamInstanceProfile: {Arn: !GetAtt InstanceProfile.Arn}
         ImageId: !Ref ImageId
-        InstanceMarketOptions:
-          MarketType: spot
-          SpotOptions: one-time
         InstanceType: !Ref InstanceType
         KeyName: !Ref KeyName
         # IMDSv2 only (disable IMDSv1)
@@ -110,6 +103,7 @@ Resources:
         TagSpecifications:
           - ResourceType: instance
             Tags:
+              - {Key: "uni:billing:application", Value: "xxxx"}
               - {Key: sydney.edu.au/resTek/ansibleGroups, Value: "cvl,desktop,usyd"}
               - {Key: sydney.edu.au/resTek/createdBy, Value: "dean.taylor@sydney.edu.au"}
               - {Key: sydney.edu.au/resTek/environment, Value: "development"}
@@ -117,6 +111,13 @@ Resources:
           Fn::Base64: !Sub
             - |
               #cloud-config
+              ansible:
+                install_method: pip
+                package_name: ansible-core
+                pull:
+                  url: https://github.com/SydneyResearchTech/playbooks.git
+                  connection: local
+                  playbook_name: microk8s-dev-env.yaml
               bootcmd:
               - echo 'APT::Periodic::Update-Package-Lists "0";' >/etc/apt/apt.conf.d/99auto-upgrades
               - echo 'APT::Periodic::Download-Upgradeable-Packages "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
@@ -192,13 +193,13 @@ Resources:
                   - "arn:aws:s3:::cvl-desktop-applications-x86-64/*"
                   - "arn:aws:s3:::eresearch2023-2e7a2865"
                   - "arn:aws:s3:::eresearch2023-2e7a2865/*"
-              - Sid: AllObjectActions
-                Effect: Allow
-                Action:
-                  - "s3:*Object"
-                Resource:
-                  - "arn:aws:s3:::cvl-desktop-applications-x86-64/*"
-                  - "arn:aws:s3:::eresearch2023-2e7a2865/*"
+              #- Sid: AllObjectActions
+              #  Effect: Allow
+              #  Action:
+              #    - "s3:*Object"
+              #  Resource:
+              #    - "arn:aws:s3:::cvl-desktop-applications-x86-64/*"
+              #    - "arn:aws:s3:::eresearch2023-2e7a2865/*"
           PolicyName: root
 
   InstanceSecurityGroup:
@@ -210,7 +211,7 @@ Resources:
           FromPort: "22"
           ToPort: "22"
           CidrIp: "0.0.0.0/0"
-      VpcId: !If [CreateVpc, !Ref Vpc, !Ref VpcId]
+      VpcId: !Ref VpcId
 
   InterIngress:
     Type: AWS::EC2::SecurityGroupIngress
@@ -231,13 +232,3 @@ Resources:
   #    IpProtocol: -1
   #    DestinationSecurityGroupId: !Ref InstanceSecurityGroup
   #    ToPort: -1
-
-  Vpc:
-    Type: AWS::EC2::VPC
-    Condition: CreateVpc
-    Properties:
-      CidrBlock: 172.27.0.0/24
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      Tags:
-        - {Key: "sydney.edu.au/resTek/createdBy", Value: "dean.taylor@sydney.edu.au"}
