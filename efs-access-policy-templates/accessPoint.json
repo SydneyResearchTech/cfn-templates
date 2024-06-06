@@ -1,0 +1,17 @@
+{
+  "Id": "${POLICY_ID}",
+  "Statement": [
+    {
+      "Sid": "${STATEMENT_SID}",
+      "Effect": "Allow",
+      "Principal": {"AWS": "${ROLE_ARN}"},
+      "Action": "elasticfilesystem:Client*",
+      "Resource": "${EFS_ARN}",
+      "Condition": {
+        "StringEquals": {
+          "elasticfilesystem:AccessPointArn": "${EFS_AP_ARN}"
+        }
+      }
+    }
+  ]
+}

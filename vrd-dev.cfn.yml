@@ -1,0 +1,95 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: VRD for development
+Parameters:
+  EfsId:
+    Type: String
+    Description: Elastic File System ID
+  LaunchTemplate:
+    Type: String
+    Description: The launch template to use to launch the instances.
+  LaunchTemplateVersion:
+    Type: String
+    Description: The launch template to use to launch the instances.
+    Default: 1
+
+Conditions: {}
+
+Outputs:
+  EC2Instance:
+    Description: EC2 Instance name
+    Value: !Ref EC2Instance
+  InstanceProfileArn:
+    Description: EC2 instance profile ARN
+    Value: !GetAtt InstanceProfile.Arn
+  RoleArn:
+    Description: EC2 instance role ARN
+    Value: !GetAtt InstanceRole.Arn
+
+Resources:
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-instance.html
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: !Ref LaunchTemplate
+        Version: !Ref LaunchTemplateVersion
+      IamInstanceProfile: !Ref InstanceProfile
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-efs-accesspoint.html
+  EFSAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref EfsId
+      RootDirectory: 
+        CreationInfo:
+          OwnerGid: 0
+          OwnerUid: 0
+          Permissions: "0755"
+        Path: !Sub
+          - '/${InstanceId}'
+          - InstanceId: !Ref EC2Instance
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: ["sts:AssumeRole"]
+      Description: ""
+      #Policies:
+      #  - PolicyDocument:
+      #      Version: 2012-10-17
+      #      Statement:
+      #        - Sid: AllowEfsAccess
+      #          Effect: Allow
+      #          Action: ["elasticfilesystem:Client*"]
+      #          Resource: arn:aws:elasticfilesystem:ap-southeast-2:381427642830:file-system/fs-019b87186b4284827
+      #          Condition:
+      #            StringEquals:
+      #              "elasticfilesystem:AccessPointArn": !GetAtt EFSAccessPoint.Arn
+
+  InstanceRolePolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowEfsAccess
+            Effect: Allow
+            Action: ["elasticfilesystem:Client*"]
+            Resource: arn:aws:elasticfilesystem:ap-southeast-2:381427642830:file-system/fs-019b87186b4284827
+            Condition:
+              StringEquals:
+                "elasticfilesystem:AccessPointArn": !GetAtt EFSAccessPoint.Arn
+      PolicyName: qwertyqwertyqwerty
+      RoleName: !Ref InstanceRole

@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create elastic file system
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html
+
+Parameters:
+  PerformanceMode:
+    Type: String
+    Default: generalPurpose
+    AllowedValues:
+      - generalPurpose
+      - maxIO
+  SubnetId1:
+    Type: AWS::EC2::Subnet::Id
+  SubnetId2:
+    Type: String
+    Default: subnet-00000000000000000
+  SubnetId3:
+    Type: String
+    Default: subnet-00000000000000000
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+Resources:
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-efs-filesystem.html
+  # https://docs.aws.amazon.com/efs/latest/ug/iam-access-control-nfs-efs.html
+  efsFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      FileSystemPolicy: !Sub
+        - |
+        {
+          "Version": "2012-10-17",
+          "Id": "????",
+          "Statement": [
+            {
+              "Sid": "????",
+              "Effect": "Allow",
+              "Principal": {"AWS": "arn:aws:iam::00000000:role/app1"},
+              "Action": [
+                "elasticfilesystem:ClientMount",
+                "elasticfilesystem:ClientWrite",
+                "elasticfilessytem:ClientRootAccess"
+              ]
+              "Condition": {
+                "Bool": {
+                  "elasticfilesystem:AccessViaMountTarget": "true"
+                }
+              }
+            }
+          ]
+        }
+      FileSystemTags:
+        - {Key: sydney.edu.au/resTek/name, Value: !Ref AWS::StackName}
+        - {Key: sydney.edu.au/resTek/createdBy, Value: dean.taylor@sydney.edu.au}
+        - {Key: sydney.edu.au/resTek/environment, Value: development}
+      LifecyclePolicies:
+        - {TransitionToIA: AFTER_1_DAY, TransitionToPrimaryStorageClass: AFTER_1_ACCESS}
+      PerformanceMode: !Ref PerformanceMode
+
+  efsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Instance to EFS mount access
+      VpcId: !Ref VpcId
+      Tags:
+        - {Key: sydney.edu.au/resTek/name, Value: !Ref AWS::StackName}
+        - {Key: sydney.edu.au/resTek/createdBy, Value: dean.taylor@sydney.edu.au}
+        - {Key: sydney.edu.au/resTek/environment, Value: development}
+
+  securityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref efsSecurityGroup
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !Ref efsSecurityGroup
+
+  mountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref fileSystem
+      SubnetId: !Ref SubnetId1
+      SecurityGroups:
+        - !Ref efsSecurityGroup
+  mountTarget2:
+    Type: AWS::EFS::MountTarget
+    Condition: hasSubnetId2
+    Properties:
+      FileSystemId: !Ref fileSystem
+      SubnetId: !Ref SubnetId2
+      SecurityGroups:
+        - !Ref efsSecurityGroup
+  mountTarget3:
+    Type: AWS::EFS::MountTarget
+    Condition: hasSubnetId3
+    Properties:
+      FileSystemId: !Ref fileSystem
+      SubnetId: !Ref SubnetId3
+      SecurityGroups:
+        - !Ref efsSecurityGroup
+
+Outputs:
+  FileSystemId: {Description: File system ID, Value: !Ref fileSystem}
+  CreatedBy: {Description: Created by, Value: dean.taylor@sydney.edu.au}
+  VpcId: {Description: VPC ID, Value: !Ref VpcId}
+  EfsPerformanceMode: {Description: EFS Performance Mode, Value: !Ref PerformanceMode}
+  SecurityGroupId: {Description: Secuirty group ID, Value: !Ref efsSecurityGroup}
+
+Conditions:
+  hasSubnetId2: !Not [!Equals [subnet-00000000000000000, !Ref SubnetId2]]
+  hasSubnetId3: !Not [!Equals [subnet-00000000000000000, !Ref SubnetId3]]

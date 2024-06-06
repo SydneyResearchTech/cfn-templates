@@ -1,4 +1,3 @@
----
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "Virtual desktop launch template"
 Parameters:
@@ -87,7 +86,7 @@ Resources:
         #  - {Arn: !GetAtt InstanceProfile.Arn}
         #  - !Ref AWS::NoValue
         #IamInstanceProfile: !Ref AWS::NoValue
-        IamInstanceProfile: {Arn: !GetAtt InstanceProfile.Arn}
+        IamInstanceProfile: {Name: !Ref InstanceProfile}
         ImageId: !Ref ImageId
         InstanceType: !Ref InstanceType
         KeyName: !Ref KeyName
@@ -113,10 +112,10 @@ Resources:
               #cloud-config
               ansible:
                 install_method: pip
-                package_name: ansible-core
+                ansible_config: /etc/ansible/ansible.cfg
+                package_name: ansible
                 pull:
                   url: https://github.com/SydneyResearchTech/playbooks.git
-                  connection: local
                   playbook_name: microk8s-dev-env.yaml
               bootcmd:
               - echo 'APT::Periodic::Update-Package-Lists "0";' >/etc/apt/apt.conf.d/99auto-upgrades
@@ -127,13 +126,39 @@ Resources:
               keyboard:
                 layout: us
               locale: en_AU.UTF-8
+              packages:
+              - git
               package_update: true
               package_upgrade: true
               package_reboot_if_required: true
+              runcmd:
+              - - /bin/bash
+                - -c
+                - |
+                  [[ -d /etc/ansible ]] || mkdir -p /etc/ansible
+                  cat <<EOT >/etc/ansible/hosts.yml
+                  all:
+                    children:
+                      dev:
+                        hosts:
+                          $(hostname --fqdn):
+                      microk8s:
+                        hosts:
+                          $(hostname --fqdn):
+                    hosts:
+                      $(hostname --fqdn):
+                        ansible_connection: local
+                  EOT
               ssh_authorized_keys: []
               ssh_pwauth: ${SshPwAuth}
               timezone: Australia/Sydney
               write_files:
+              - content: |
+                  [defaults]
+                  inventory = /etc/ansible/hosts.yml
+                  [ssh_connection]
+                  ssh_args = -o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=/tmp/%r@%h:%p
+                path: /etc/ansible/ansible.cfg
               - content: |
                   [profile default]
                   credential_source=Ec2InstanceMetadata

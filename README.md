@@ -2,6 +2,44 @@
 
 Amazon CloudFormation templates
 
+## Create launch template(s)
+
+```json
+[
+  {"ParameterKey": "KeyName", "ParameterValue": ""},
+  {"ParameterKey": "VpcId", "ParameterValue": ""},
+  {"ParameterKey": "PublicResourceAccountID", "ParameterValue": ""},
+  {"ParameterKey": "ImageId", "ParameterValue": "ami-0b4387dd850b3a1ef"},
+  {"ParameterKey": "SubnetId", "ParameterValue": ""}
+]
+```
+
+```bash
+aws cloudformation create-stack --stack-name vrd-launch-template \
+--capabilities CAPABILITY_IAM \
+--template-body file://./vrd-launch-template.cfn.yml \
+--parameters file://./vrd-launch-template.json
+
+aws cloudformation describe-stack-events --stack-name vrd-launch-template
+```
+
+## Create VRD for development
+
+```json
+[
+  {"ParameterKey": "EfsId", "ParameterValue": "fs-###########"},
+  {"ParameterKey": "LaunchTemplate", "ParameterValue": "vrd-launch-template"},
+  {"ParameterKey": "LaunchTemplateVersion", "ParameterValue": "1"}
+]
+```
+
+```bash
+aws cloudformation create-stack --stack-name vrd-dean-taylor \
+--capabilities CAPABILITY_IAM \
+--template-body file://./vrd-dev.cfn.yml \
+--parameters file://./vrd-dev.json
+```
+
 ## Desktop
 
 ```bash
