@@ -1,10 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "Virtual desktop launch template"
 Parameters:
-  AvailabilityZones:
-    Description: "Availability zone list"
-    Type: "List<AWS::EC2::AvailabilityZone::Name>"
-    Default: "ap-southeast-2a,ap-southeast-2b,ap-southeast-2c"
   DefaultUserPassword:
     Description: "Optional: Set the Default user (ubuntu) password"
     Type: String
@@ -23,42 +19,15 @@ Parameters:
     Description: "Name of an existing EC2 KeyPair to enable SSH access to the instance"
     Type: "AWS::EC2::KeyPair::KeyName"
     ConstraintDescription: "must be the name of an existing EC2 KeyPair."
-  PublicResourceAccountID:
-    Description: "Account ID of Virtual Laboratory public resources"
-    Type: String
-    Default: "381427642830"
   SubnetId:
     Type: String
     Default: ""
   VpcId:
     Type: "AWS::EC2::VPC::Id"
     Default: ""
-  ASGDesiredCapacity:
-    Type: Number
-    Description: "Auto Scale Group desired capacity (i.e., Number of VM instances)"
-    Default: 1
-  AuthorizedKeys:
-    Type: CommaDelimitedList
-    Description: "SSH authorized keys"
-    Default: ""
-  InstanceSecurityGroups:
-    Type: CommaDelimitedList
-    Description: Security groups applied to each instance
-    Default: ""
-  InstanceMarketType:
-    Type: String
-    Default: "spot"
-    AllowedValues: ["capacity-block","spot"]
 
 Conditions:
-  #CreateInstanceProfile: !Equals [!Ref InstanceSecurityGroups, ""]
-  CreateInstanceProfile: !Equals ["1", "2"]
-  CreateVpc: !Equals [!Ref VpcId, ""]
-  IsPublicAccount: !Equals
-    - !Ref AWS::AccountId
-    - !Ref PublicResourceAccountID
   IsUserPasswordEmpty: !Equals [!Ref DefaultUserPassword, ""]
-  InstanceMarketTypeSpot: !Equals [!Ref InstanceMarketType, "spot"]
 
 Outputs:
   InstanceProfileArn:
@@ -81,11 +50,7 @@ Resources:
           - DeviceName: /dev/sda1
             Ebs:
               VolumeSize: 256
-        #IamInstanceProfile: !If
-        #  - CreateInstanceProfile
-        #  - {Arn: !GetAtt InstanceProfile.Arn}
-        #  - !Ref AWS::NoValue
-        #IamInstanceProfile: !Ref AWS::NoValue
+              DeleteOnTermination: true
         IamInstanceProfile: {Name: !Ref InstanceProfile}
         ImageId: !Ref ImageId
         InstanceType: !Ref InstanceType
@@ -180,7 +145,6 @@ Resources:
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
-    #Condition: CreateInstanceProfile
     Properties:
       Path: /
       Roles:
