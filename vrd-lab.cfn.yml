@@ -1,72 +1,23 @@
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Virtual Desktop laboratory
+Description: VRD lab
 Parameters:
   AvailabilityZones:
     Description: "Availability zone list"
     Type: "List<AWS::EC2::AvailabilityZone::Name>"
     Default: "ap-southeast-2a,ap-southeast-2b,ap-southeast-2c"
-  DefaultUserPassword:
-    Description: "Optional: Set the Default user (ubuntu) password"
-    Type: String
-    Default: ""
-    NoEcho: true
-  ImageId:
-    Description: "AMI image id"
-    Type: "AWS::EC2::Image::Id"
-  InstanceType:
-    Description: "EC2 instance type"
-    Type: String
-    Default: g4dn.xlarge
-    AllowedValues: ["g4dn.xlarge"]
-    ConstraintDescription: "must be a valid EC2 instance type."
-  KeyName:
-    Description: "Name of an existing EC2 KeyPair to enable SSH access to the instance"
-    Type: "AWS::EC2::KeyPair::KeyName"
-    ConstraintDescription: "must be the name of an existing EC2 KeyPair."
-  PublicResourceAccountID:
-    Description: "Account ID of Virtual Laboratory public resources"
-    Type: String
-    Default: "381427642830"
-  SubnetId:
-    Type: String
-    Default: ""
-  VpcId:
-    Type: "AWS::EC2::VPC::Id"
-    Default: ""
   ASGDesiredCapacity:
     Type: Number
     Description: "Auto Scale Group desired capacity (i.e., Number of VM instances)"
-    Default: 1
-  AuthorizedKeys:
-    Type: CommaDelimitedList
-    Description: "SSH authorized keys"
-    Default: ""
-  InstanceSecurityGroups:
-    Type: CommaDelimitedList
-    Description: Security groups applied to each instance
-    Default: ""
+    Default: 0
+  LaunchTemplateName:
+    Type: String
+  LaunchTemplateVersion:
+    Type: Number
 
-Conditions:
-  #CreateInstanceProfile: !Equals [!Ref InstanceSecurityGroups, ""]
-  CreateInstanceProfile: !Equals ["1", "2"]
-  CreateVpc: !Equals [!Ref VpcId, ""]
-  IsPublicAccount: !Equals
-    - !Ref AWS::AccountId
-    - !Ref PublicResourceAccountID
-  IsUserPasswordEmpty: !Equals [!Ref DefaultUserPassword, ""]
-  InstanceMarketTypeSpot: !Equals [!Ref InstanceMarketType, "spot"]
+Conditions: {}
 
-Outputs:
-  InstanceProfileArn:
-    Description: EC2 instance profile ARN
-    Value: !GetAtt InstanceProfile.Arn
-  RoleArn:
-    Description: EC2 instance role ARN
-    Value: !GetAtt InstanceRole.Arn
-  SecurityGroupId:
-    Description: Security group ID applied to instances
-    Value: !GetAtt InstanceSecurityGroup.GroupId
+Outputs: {}
 
 Resources:
   AutoScaleGroup:
@@ -75,169 +26,7 @@ Resources:
       AvailabilityZones: !Ref AvailabilityZones
       DesiredCapacity: !Ref ASGDesiredCapacity
       LaunchTemplate:
-        LaunchTemplateId: !Ref EC2LaunchTemplate
-        Version: !GetAtt [EC2LaunchTemplate, LatestVersionNumber]
+        LaunchTemplateName: !Ref LaunchTemplateName
+        Version: !Ref LaunchTemplateVersion
       MaxSize: 24
       MinSize: 0
-      Tags:
-        - {Key: "uni:billing:application", Value: "xxxx", PropagateAtLaunch: true}
-
-  EC2LaunchTemplate:
-    Type: AWS::EC2::LaunchTemplate
-    Properties:
-      LaunchTemplateName: !Sub "${AWS::StackName}-launch-template"
-      LaunchTemplateData:
-        BlockDeviceMappings:
-          - DeviceName: /dev/sda1
-            Ebs:
-              VolumeSize: 100
-        IamInstanceProfile: {Arn: !GetAtt InstanceProfile.Arn}
-        ImageId: !Ref ImageId
-        InstanceMarketOptions:
-          MarketType: spot
-          SpotOptions: one-time
-        InstanceType: !Ref InstanceType
-        KeyName: !Ref KeyName
-        # IMDSv2 only (disable IMDSv1)
-        MetadataOptions:
-          HttpEndpoint: enabled
-          HttpTokens: required
-        NetworkInterfaces:
-          - DeviceIndex: 0
-            Groups:
-              - !GetAtt InstanceSecurityGroup.GroupId
-            SubnetId: !Ref SubnetId
-        TagSpecifications:
-          - ResourceType: instance
-            Tags:
-              - {Key: sydney.edu.au/resTek/ansibleGroups, Value: "cvl,desktop,usyd"}
-              - {Key: sydney.edu.au/resTek/createdBy, Value: "dean.taylor@sydney.edu.au"}
-              - {Key: sydney.edu.au/resTek/environment, Value: "development"}
-        UserData:
-          Fn::Base64: !Sub
-            - |
-              #cloud-config
-              bootcmd:
-              - echo 'APT::Periodic::Update-Package-Lists "0";' >/etc/apt/apt.conf.d/99auto-upgrades
-              - echo 'APT::Periodic::Download-Upgradeable-Packages "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
-              - echo 'APT::Periodic::AutocleanInterval "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
-              - echo 'APT::Periodic::Unattended-Upgrade "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
-              chpasswd: ${Password}
-              keyboard:
-                layout: us
-              locale: en_AU.UTF-8
-              package_update: true
-              package_upgrade: true
-              package_reboot_if_required: true
-              ssh_authorized_keys: []
-              ssh_pwauth: ${SshPwAuth}
-              timezone: Australia/Sydney
-              write_files:
-              - content: |
-                  [profile default]
-                  credential_source=Ec2InstanceMetadata
-                  region=ap-southeast-2
-                  output=json
-                path: /etc/aws_config
-                permission: '0644'
-              - content: |
-                  AWS_CONFIG_FILE="/etc/aws_config"
-                path: /etc/environment
-                append: true
-            - SshPwAuth: !If [IsUserPasswordEmpty, "false", "true"]
-              Password: !If
-                - IsUserPasswordEmpty
-                - "{}"
-                - !Sub
-                    - "{expire: true, users: [{name: ubuntu, password: ${Password}, type: text}]}"
-                    - Password: !Ref DefaultUserPassword
-
-  InstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    #Condition: CreateInstanceProfile
-    Properties:
-      Path: /
-      Roles:
-        - !Ref InstanceRole
-
-  InstanceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal: {Service: ["ec2.amazonaws.com"]}
-            Action: ["sts:AssumeRole"]
-      Description: Instance access to resources
-      Policies:
-        - PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Sid: AllowAccountLevelS3Actions
-                Effect: Allow
-                Action:
-                  - "s3:GetBucketLocation"
-                  - "s3:GetAccountPublicAccessBlock"
-                  - "s3:ListAccessPoints"
-                  - "s3:ListAllMyBuckets"
-                Resource: "arn:aws:s3:::*"
-              - Sid: AllowListAndReadS3ActionOnMyBucket
-                Effect: Allow
-                Action:
-                  - "s3:Get*"
-                  - "s3:List*"
-                Resource:
-                  - "arn:aws:s3:::cvl-desktop-applications-x86-64"
-                  - "arn:aws:s3:::cvl-desktop-applications-x86-64/*"
-                  - "arn:aws:s3:::eresearch2023-2e7a2865"
-                  - "arn:aws:s3:::eresearch2023-2e7a2865/*"
-              - Sid: AllObjectActions
-                Effect: Allow
-                Action:
-                  - "s3:*Object"
-                Resource:
-                  - "arn:aws:s3:::cvl-desktop-applications-x86-64/*"
-                  - "arn:aws:s3:::eresearch2023-2e7a2865/*"
-          PolicyName: root
-
-  InstanceSecurityGroup:
-    Type: "AWS::EC2::SecurityGroup"
-    Properties:
-      GroupDescription: "Enable EC2 instance access"
-      SecurityGroupIngress:
-        - IpProtocol: "tcp"
-          FromPort: "22"
-          ToPort: "22"
-          CidrIp: "0.0.0.0/0"
-      VpcId: !If [CreateVpc, !Ref Vpc, !Ref VpcId]
-
-  InterIngress:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      Description: allow instances to connect
-      FromPort: -1
-      GroupId: !Ref InstanceSecurityGroup
-      IpProtocol: -1
-      SourceSecurityGroupId: !Ref InstanceSecurityGroup
-      ToPort: -1
-
-  #InterEgress:
-  #  Type: AWS::EC2::SecurityGroupEgress
-  #  Properties:
-  #    Description: allow instances to connect
-  #    FromPort: -1
-  #    GroupId: !Ref InstanceSecurityGroup
-  #    IpProtocol: -1
-  #    DestinationSecurityGroupId: !Ref InstanceSecurityGroup
-  #    ToPort: -1
-
-  Vpc:
-    Type: AWS::EC2::VPC
-    Condition: CreateVpc
-    Properties:
-      CidrBlock: 172.27.0.0/24
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      Tags:
-        - {Key: "sydney.edu.au/resTek/createdBy", Value: "dean.taylor@sydney.edu.au"}

@@ -1,11 +1,23 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Virtual desktop launch template"
+Description: "Virtual research desktop launch template"
 Parameters:
-  DefaultUserPassword:
-    Description: "Optional: Set the Default user (ubuntu) password"
+  Billing:
+    Description: "Billing application code"
     Type: String
-    Default: ""
-    NoEcho: true
+    Default: "rtek"
+  CreatedBy:
+    Descritpion: "Group or individual deploying this service"
+    Type: String
+    Default: "dean.taylor@sydney.edu.au"
+  Environment:
+    AllowedValues: ["development","production","user acceptance testing"]
+    Default: "development"
+    Description: "Environment"
+    Type: String
+  Groups:
+    Default: "cvl,desktop,usyd,vrd"
+    Description: "Ansible groups as CSV no spaces"
+    Type: String
   ImageId:
     Description: "AMI image id"
     Type: "AWS::EC2::Image::Id"
@@ -25,9 +37,6 @@ Parameters:
   VpcId:
     Type: "AWS::EC2::VPC::Id"
     Default: ""
-
-Conditions:
-  IsUserPasswordEmpty: !Equals [!Ref DefaultUserPassword, ""]
 
 Outputs:
   InstanceProfileArn:
@@ -67,81 +76,78 @@ Resources:
         TagSpecifications:
           - ResourceType: instance
             Tags:
-              - {Key: "uni:billing:application", Value: "xxxx"}
-              - {Key: sydney.edu.au/resTek/ansibleGroups, Value: "cvl,desktop,usyd"}
-              - {Key: sydney.edu.au/resTek/createdBy, Value: "dean.taylor@sydney.edu.au"}
-              - {Key: sydney.edu.au/resTek/environment, Value: "development"}
+              - {Key: "uni:billing:application", Value: !Ref Billing}
+              - {Key: "uni:billing:managed_by",Value: "uni"}
+              - {Key: "uni:billing:support",Value: "unmanaged"}
+              - {Key: "uni:operations:backup", Value: "none"}
+              - {Key: sydney.edu.au/ou, Value: "Research Technology"}
+              - {Key: sydney.edu.au/resTek/ansibleGroups, Value: !Ref AnsibleGroups}
+              - {Key: sydney.edu.au/resTek/createdBy, Value: !Ref CreatedBy}
+              - {Key: sydney.edu.au/resTek/environment, Value: !Ref Environment}
         UserData:
-          Fn::Base64: !Sub
-            - |
-              #cloud-config
-              ansible:
-                install_method: pip
-                ansible_config: /etc/ansible/ansible.cfg
-                package_name: ansible
-                pull:
-                  url: https://github.com/SydneyResearchTech/playbooks.git
-                  playbook_name: microk8s-dev-env.yaml
-              bootcmd:
-              - echo 'APT::Periodic::Update-Package-Lists "0";' >/etc/apt/apt.conf.d/99auto-upgrades
-              - echo 'APT::Periodic::Download-Upgradeable-Packages "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
-              - echo 'APT::Periodic::AutocleanInterval "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
-              - echo 'APT::Periodic::Unattended-Upgrade "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
-              chpasswd: ${Password}
-              keyboard:
-                layout: us
-              locale: en_AU.UTF-8
-              packages:
-              - git
-              package_update: true
-              package_upgrade: true
-              package_reboot_if_required: true
-              runcmd:
-              - - /bin/bash
-                - -c
-                - |
-                  [[ -d /etc/ansible ]] || mkdir -p /etc/ansible
-                  cat <<EOT >/etc/ansible/hosts.yml
-                  all:
-                    children:
-                      dev:
-                        hosts:
-                          $(hostname --fqdn):
-                      microk8s:
-                        hosts:
-                          $(hostname --fqdn):
-                    hosts:
-                      $(hostname --fqdn):
-                        ansible_connection: local
-                  EOT
-              ssh_authorized_keys: []
-              ssh_pwauth: ${SshPwAuth}
-              timezone: Australia/Sydney
-              write_files:
-              - content: |
-                  [defaults]
-                  inventory = /etc/ansible/hosts.yml
-                  [ssh_connection]
-                  ssh_args = -o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=/tmp/%r@%h:%p
-                path: /etc/ansible/ansible.cfg
-              - content: |
-                  [profile default]
-                  credential_source=Ec2InstanceMetadata
-                  region=ap-southeast-2
-                  output=json
-                path: /etc/aws_config
-                permission: '0644'
-              - content: |
-                  AWS_CONFIG_FILE="/etc/aws_config"
-                path: /etc/environment
-                append: true
-            - SshPwAuth: !If [IsUserPasswordEmpty, "false", "true"]
-              Password: !If
-                - IsUserPasswordEmpty
-                - "{}"
-                - !Sub
-                    - "{expire: true, users: [{name: ubuntu, password: ${Password}, type: text}]}"
-                    - Password: !Ref DefaultUserPassword
+          Fn::Base64: |
+            #cloud-config
+            ansible:
+              install_method: pip
+              ansible_config: /etc/ansible/ansible.cfg
+              package_name: ansible
+              setup_controller:
+                run_ansible:
+                  playbook_name: restek.core.microk8s_dev_env
+              galaxy:
+                actions:
+                  - ["ansible-galaxy","install","-r","/etc/ansible/requirements.yml"]
+            bootcmd:
+            - echo 'APT::Periodic::Update-Package-Lists "0";' >/etc/apt/apt.conf.d/99auto-upgrades
+            - echo 'APT::Periodic::Download-Upgradeable-Packages "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
+            - echo 'APT::Periodic::AutocleanInterval "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
+            - echo 'APT::Periodic::Unattended-Upgrade "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
+            keyboard:
+              layout: us
+            locale: en_AU.UTF-8
+            packages:
+            - git
+            package_update: true
+            package_upgrade: true
+            package_reboot_if_required: true
+            runcmd:
+            - - /bin/bash
+              - -c
+              - |
+                mkdir -p /etc/ansible
+                cat <<EOT >/etc/ansible/hosts.yml
+                all:
+                  hosts:
+                    $(hostname --fqdn):
+                      ansible_connection: local
+                EOT
+            ssh_authorized_keys: []
+            ssh_pwauth: false
+            timezone: Australia/Sydney
+            write_files:
+            - content: |
+                [defaults]
+                inventory = /etc/ansible/hosts.yml
+                [ssh_connection]
+                ssh_args = -o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=/tmp/%r@%h:%p
+              path: /etc/ansible/ansible.cfg
+            - content: |
+                ---
+                collections:
+                  - name: https://github.com/SydneyResearchTech/playbooks.git
+                    type: git
+              path: /etc/ansible/requirements.yml
+            - content: |
+                [profile default]
+                credential_source=Ec2InstanceMetadata
+                region=ap-southeast-2
+                output=json
+              path: /etc/aws_config
+              permission: '0644'
+            - content: |
+                AWS_CONFIG_FILE="/etc/aws_config"
+              path: /etc/environment
+              append: true
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -211,13 +217,3 @@ Resources:
       IpProtocol: -1
       SourceSecurityGroupId: !Ref InstanceSecurityGroup
       ToPort: -1
-
-  #InterEgress:
-  #  Type: AWS::EC2::SecurityGroupEgress
-  #  Properties:
-  #    Description: allow instances to connect
-  #    FromPort: -1
-  #    GroupId: !Ref InstanceSecurityGroup
-  #    IpProtocol: -1
-  #    DestinationSecurityGroupId: !Ref InstanceSecurityGroup
-  #    ToPort: -1

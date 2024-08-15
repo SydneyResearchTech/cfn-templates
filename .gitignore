@@ -1,2 +1,4 @@
 .*.swp
 /tmp/
+/.env/
+/change_set/
