@@ -1,0 +1,86 @@
+---
+# https://docs.aws.amazon.com/eks/latest/userguide/launch-templates.html
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ""
+Parameters:
+  EksClusterName:
+    Type: String
+    Default: restek-uat-vpc
+  NodegroupName:
+    Type: String
+    Default: m7g-4xlarge
+Resources:
+  launchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: "/dev/xvda"
+            Ebs:
+              Iops: 3000
+              VolumeSize: 100
+              VolumeType: gp3
+              Throughput: 125
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub
+                  - "${CLUSTER_NAME}-${NODE_GROUP_NAME}-Node"
+                  - CLUSTER_NAME: !Ref EksClusterName
+                  - NODE_GROUP_NAME: !Ref NodegroupName
+              - {Key: alpha.eksctl.io/nodegroup-name, Value: !Ref NodegroupName}
+              - {Key: alpha.eksctl.io/nodegroup-type, Value: managed}
+              - {Key: karpenter.sh/discovery, Value: !Ref EksClusterName}
+              - {Key: "uni:billing:application", Value: xnat}
+              - {Key: "uni:billing:support", Value: unmanaged}
+              - {Key: "uni:operations:backup", none}
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub
+                  - "${CLUSTER_NAME}-${NODE_GROUP_NAME}-Node"
+                  - CLUSTER_NAME: !Ref EksClusterName
+                  - NODE_GROUP_NAME: !Ref NodegroupName
+              - {Key: alpha.eksctl.io/nodegroup-name, Value: !Ref NodegroupName}
+              - {Key: alpha.eksctl.io/nodegroup-type, Value: managed}
+              - {Key: karpenter.sh/discovery, Value: !Ref EksClusterName}
+              - {Key: "uni:billing:application", Value: xnat}
+              - {Key: "uni:billing:support", Value: unmanaged}
+              - {Key: "uni:operations:backup", none}
+          - ResourceType: network-interface
+            Tags:
+              - Key: Name
+                Value: !Sub
+                  - "${CLUSTER_NAME}-${NODE_GROUP_NAME}-Node"
+                  - CLUSTER_NAME: !Ref EksClusterName
+                  - NODE_GROUP_NAME: !Ref NodegroupName
+              - {Key: alpha.eksctl.io/nodegroup-name, Value: !Ref NodegroupName}
+              - {Key: alpha.eksctl.io/nodegroup-type, Value: managed}
+              - {Key: karpenter.sh/discovery, Value: !Ref EksClusterName}
+              - {Key: "uni:billing:application", Value: xnat}
+              - {Key: "uni:billing:support", Value: unmanaged}
+              - {Key: "uni:operations:backup", none}
+        SecurityGroupIds:
+          - sg-061aebf77cc1d615d
+        MetadataOptions:
+          HttpTokens: required
+          HttpPutResponseHopLimit: 2
+        UserData: |
+          #cloud-config
+          # https://cloudinit.readthedocs.io/en/latest/reference/modules.html#ansible
+          ansible:
+            install_method: pip
+            setup_controller:
+              run_ansible:
+                playbook_name: "eks_managed_node"
+                connection: local
+                inventory: ",localhost"
+            galaxy:
+              - ansible-galaxy collection install git+https://github.com/sydneyresearchtech/playbooks.git,main
+      LaunchTemplateName: !Sub
+        - "eksctl-${CLUSTER_NAME}-nodegroup-${NODE_GROUP_NAME}-custom"
+        - CLUSTER_NAME: !Ref EksClusterName
+        - NODE_GROUP_NAME: !Ref NodegroupName
+      TagSpecifications: []
+      VersionDescription: ""
