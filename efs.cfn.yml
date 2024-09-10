@@ -88,7 +88,7 @@ Resources:
     Type: AWS::EFS::MountTarget
     Condition: hasSubnetId1
     Properties:
-      FileSystemId: !Ref fileSystem
+      FileSystemId: !Ref efsFileSystem
       SubnetId: !Ref SubnetId1
       SecurityGroups:
         - !Ref efsSecurityGroup
@@ -96,7 +96,7 @@ Resources:
     Type: AWS::EFS::MountTarget
     Condition: hasSubnetId2
     Properties:
-      FileSystemId: !Ref fileSystem
+      FileSystemId: !Ref efsFileSystem
       SubnetId: !Ref SubnetId2
       SecurityGroups:
         - !Ref efsSecurityGroup
@@ -104,13 +104,13 @@ Resources:
     Type: AWS::EFS::MountTarget
     Condition: hasSubnetId3
     Properties:
-      FileSystemId: !Ref fileSystem
+      FileSystemId: !Ref efsFileSystem
       SubnetId: !Ref SubnetId3
       SecurityGroups:
         - !Ref efsSecurityGroup
 
 Outputs:
-  FileSystemId: {Description: File system ID, Value: !Ref fileSystem}
+  FileSystemId: {Description: File system ID, Value: !Ref efsFileSystem}
   VpcId: {Description: VPC ID, Value: !Ref VpcId}
   EfsPerformanceMode: {Description: EFS Performance Mode, Value: !Ref PerformanceMode}
   SecurityGroupId: {Description: Security group ID, Value: !Ref efsSecurityGroup}
