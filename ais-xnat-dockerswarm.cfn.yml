@@ -1,6 +1,6 @@
 ## AWS XNAT Pipeline Engine Cluster CloudFormation##
 AWSTemplateFormatVersion: '2010-09-09'
-Description: AIS XNAT Docker Swarm Cluster 
+Description: AIS XNAT Docker Swarm Cluster
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -8,7 +8,7 @@ Metadata:
         default: Parent stacks
       Parameters:
       - ParentVPCStack
-    - Label: 
+    - Label:
         default: Swarm
       Parameters:
       - EC2AMI
@@ -78,7 +78,7 @@ Parameters:
     Default: 50
   SwarmManagerMinSize:
     Type: Number
-    Description: Swarm Manager's Min Number of Instance  
+    Description: Swarm Manager's Min Number of Instance
     Default: 3
     AllowedValues:
     - 1
@@ -192,8 +192,8 @@ Parameters:
   DXCMSLambdaS3Bucket:
     Type: 'AWS::SSM::Parameter::Value<String>'
     Default: DXCLambdaS3Bucket
-Mappings: 
-  PrivateSubnets: 
+Mappings:
+  PrivateSubnets:
     PRD:
       apse2a: 10.86.224.0/21
       apse2b: 10.86.232.0/21
@@ -208,23 +208,23 @@ Resources:
     Type: 'AWS::Logs::LogGroup'
     Properties:
       RetentionInDays: 14
-  PipelineRole: 
+  PipelineRole:
     Type: "AWS::IAM::Role"
-    Properties: 
-      AssumeRolePolicyDocument: 
+    Properties:
+      AssumeRolePolicyDocument:
         Version: "2012-10-17"
-        Statement: 
-          - 
+        Statement:
+          -
             Effect: "Allow"
-            Principal: 
-              Service: 
+            Principal:
+              Service:
                 - "ec2.amazonaws.com"
-            Action: 
+            Action:
               - "sts:AssumeRole"
       ManagedPolicyArns:
       - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
       - arn:aws:iam::aws:policy/CloudWatchFullAccess
-      - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM        
+      - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
       Path: "/"
       Policies:
         - PolicyName: logs
@@ -345,27 +345,27 @@ Resources:
                   - 'lambda:InvokeFunction'
                 Resource:
                   - !Ref PuppetInstallLambdaArn
-  PipelineRolePolicy: 
+  PipelineRolePolicy:
     Type: "AWS::IAM::ManagedPolicy"
-    Properties: 
-      PolicyDocument: 
+    Properties:
+      PolicyDocument:
         Version: "2012-10-17"
-        Statement: 
-          - 
+        Statement:
+          -
             Effect: "Allow"
             Action: "Autoscaling:SetInstanceProtection"
-            Resource: "*" 
-      Roles: 
-        - !Ref PipelineRole   
-  InstanceProfile: 
+            Resource: "*"
+      Roles:
+        - !Ref PipelineRole
+  InstanceProfile:
     Type: "AWS::IAM::InstanceProfile"
-    Properties: 
+    Properties:
       Path: "/"
-      Roles: 
-        - !Ref PipelineRole 
+      Roles:
+        - !Ref PipelineRole
   LoadBalancerMgr:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
-    Properties: 
+    Properties:
       Type: network
       Scheme: internal
       Subnets:
@@ -395,7 +395,7 @@ Resources:
         Value: !Sub '${AWS::StackName}_DockerSwarmManager_NLB'
   ListenerDockerJoin:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
-    Properties: 
+    Properties:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref TargetGroupDockerJoin
@@ -404,7 +404,7 @@ Resources:
       Protocol: TCP
   ListenerDockerDaemon:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
-    Properties: 
+    Properties:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref TargetGroupDockerDaemon
@@ -413,7 +413,7 @@ Resources:
       Protocol: TCP
   TargetGroupDockerJoin:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
-    Properties: 
+    Properties:
       HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 10
       HealthyThresholdCount: 3
@@ -424,7 +424,7 @@ Resources:
         'Fn::ImportValue': !Sub '${ParentVPCStack}-VPC'
   TargetGroupDockerDaemon:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
-    Properties: 
+    Properties:
       HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 10
       HealthyThresholdCount: 3
@@ -485,7 +485,7 @@ Resources:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     DependsOn:
       - LoadBalancerMgr
-    Metadata: 
+    Metadata:
       'AWS::CloudFormation::Init':
         configSets:
           SwarmInit:
@@ -555,7 +555,7 @@ Resources:
                     declare -i pendingjob_num=0
                     declare -i runningjob_num=0
                     for i in $(docker service ls |grep -v ID |awk '{print $1}')
-                    do 
+                    do
                         pendingjobdetail=$(docker service ps --format "{{.ID}}:{{.Name}}:{{.DesiredState}}:{{.CurrentState}}" -f "desired-state=running" $i |cut -d: -f4|grep Pending)
                         runningjobdetail=$(docker service ps --format "{{.ID}}:{{.Name}}:{{.DesiredState}}:{{.CurrentState}}" -f "desired-state=running" $i |cut -d: -f4|grep Running)
                         ## If the pendingjobdetail is not empty
@@ -593,7 +593,7 @@ Resources:
                     do
                         Docker_manager_node_status=$(echo $Docker_manager_node|cut -d: -f2)
                         Docker_manager_node_managerstatus=$(echo $Docker_manager_node|cut -d: -f4)
-                        # If the Docker Manager Node is Down, and the Manager Status is "Unreachable", then remove it from the Docker Swarm Managers 
+                        # If the Docker Manager Node is Down, and the Manager Status is "Unreachable", then remove it from the Docker Swarm Managers
                         if [ $Docker_manager_node_status == "Down" ] && [ $Docker_manager_node_managerstatus == "Unreachable" ];then
                             Docker_manager_deletenode=$(echo $Docker_manager_node|cut -d: -f1)
                             printf "`date`\tThe docker manager node is down and will be removed: $Docker_manager_deletenode\n"
@@ -639,18 +639,18 @@ Resources:
               owner: 'root'
               group: 'root'
           commands:
-            10_swarm_bootstrap: 
+            10_swarm_bootstrap:
               command: !Sub |
                 if [ ! -e /efs/dockerswarm/ ] && [ ! -e /efs/dockerswarm/joinmanagertoken.conf ];then
                   # Create the XNAT DockerSwarm Manager Direcotry and Logs Direcotry
                   mkdir -p /efs/dockerswarm/
                   mkdir -p /efs/dockerswarm/logs
-                  ## Get the XNAT DockerSwarm Cluster Network Load Balancer DNS Name and IP, and Record them into the shared Folders             
+                  ## Get the XNAT DockerSwarm Cluster Network Load Balancer DNS Name and IP, and Record them into the shared Folders
                   DockerSwarmManagerLB="${LoadBalancerMgr.DNSName}"
                   echo $DockerSwarmManagerLB > /efs/dockerswarm/DockerSwarmManager.conf
                   docker swarm init
                   docker swarm join-token manager|grep join|awk '{print $5}' > /efs/dockerswarm/joinmanagertoken.conf
-                  docker swarm join-token worker|grep join|awk '{print $5}' > /efs/dockerswarm/joinworkertoken.conf            
+                  docker swarm join-token worker|grep join|awk '{print $5}' > /efs/dockerswarm/joinworkertoken.conf
                 else
                   sleep 30
                   for i in `cat /efs/dockerswarm/DockerSwarmManager.conf`
@@ -663,7 +663,7 @@ Resources:
                       do
                         Docker_manager_node_status=$(echo $Docker_manager_node|cut -d: -f2)
                         Docker_manager_node_managerstatus=$(echo $Docker_manager_node|cut -d: -f4)
-                        # If the Docker Manager Node is Down, and the Manager Status is "Unreachable", then remove it from the Docker Swarm Managers 
+                        # If the Docker Manager Node is Down, and the Manager Status is "Unreachable", then remove it from the Docker Swarm Managers
                         if [ $Docker_manager_node_status == "Down" ] && [ $Docker_manager_node_managerstatus == "Unreachable" ];then
                           Docker_manager_deletenode=$(echo $Docker_manager_node|cut -d: -f1)
                           printf "`date`\tThe docker manager node is down and will be removed: $Docker_manager_deletenode\n" >> /efs/dockerswarm/logs/DockerSwarmJoinLog.log 2>&1
@@ -683,7 +683,7 @@ Resources:
                 fi
                 sed -i "s/Feature/${Lifecycle}/" /root/XNATDockerSwarmManagerMonitoring.sh
         setupCfnHup:
-          packages: 
+          packages:
             yum:
               aws-cfn-bootstrap: []
           files:
@@ -719,15 +719,15 @@ Resources:
             00_cleanup_first:
               command: |
                 echo > /var/spool/cron/root
-              test: "test -e /var/spool/cron/root" 
+              test: "test -e /var/spool/cron/root"
             10_setupCronjob:
               command: |
                 if ! grep -q 'yum -y update-minimal --security' /var/spool/cron/root; then
                   echo "01 00 * * 6    date >> /tmp/yum_patch.log; yum -y -q update-minimal --security --skip-broken >> /tmp/yum_patch.log 2>&1" >> /var/spool/cron/root
                 fi
-              test: "test ! 0 = $(grep 'update-minimal' /var/spool/cron/root > /dev/null; echo $?)" 
+              test: "test ! 0 = $(grep 'update-minimal' /var/spool/cron/root > /dev/null; echo $?)"
             # Check the Docker Swarm Manager Node status and Worker Node status, and send the current pending jobs to CloudWatch every 5 minutes.
-            20_cron_swarm_manager_monitoring: 
+            20_cron_swarm_manager_monitoring:
               command: |
                 echo "*/2 * * * * /root/XNATDockerSwarmManagerMonitoring.sh" >> /var/spool/cron/root
               test: "test ! 0 = $(grep 'XNATDockerSwarmManagerMonitoring.sh' /var/spool/cron/root > /dev/null; echo $?)"
@@ -738,14 +738,14 @@ Resources:
               test: "test ! 0 = $(grep 'XNATDockerSwarmManagerLogsCleanup.sh' /var/spool/cron/root > /dev/null; echo $?)"
         setupDocker:
           packages:
-            yum: 
+            yum:
               docker: []
           commands:
             10_expose_daemon:
               command: |
                 sed -i 's/--containerd=\/run\/containerd\/containerd.sock $OPTIONS $DOCKER_STORAGE_OPTIONS $DOCKER_ADD_RUNTIMES/-H=tcp:\/\/0.0.0.0:2375/' /lib/systemd/system/docker.service
                 systemctl daemon-reload
-            20_start_docker: 
+            20_start_docker:
               command: |
                 systemctl enable docker
                 systemctl start docker
@@ -792,7 +792,7 @@ Resources:
                 datetime_format = %d/%b/%Y:%H:%M:%S %z
                 file = /efs/dockerswarm/logs/DockerSwarmJoinLog.log
                 log_stream_name = {instance_id}/efs/dockerswarm/DockerSwarmJoinLog.log
-                log_group_name = ${ServerLogs}                
+                log_group_name = ${ServerLogs}
               mode: '000644'
               owner: root
               group: root
@@ -801,7 +801,7 @@ Resources:
               command: |
                 systemctl enable awslogsd
                 systemctl start awslogsd
-        # DXC        
+        # DXC
         onboard_dxc:
           commands:
             10_install_ssmagent:
@@ -815,8 +815,8 @@ Resources:
                 /usr/local/bin/aws lambda invoke --region '${AWS::Region}' --function-name '${DXCMSLambdaName}' --cli-binary-format 'raw-in-base64-out' --payload '{"Instanceid": "'"$EC2ID"'","InstanceNameTag": "${AWS::StackName}-EC2Instance","OSNameTag": "AmazonLinux2","PatchGroupTag": "DefaultPatchGroupRHEL","DXCEbsVolumeBackupLevel": "${DXCMSBackupTag}"}' response.json
         invoke-domainjoin-lambda:
           commands:
-            01_invoke_lambda:   
-              command: !Sub |  
+            01_invoke_lambda:
+              command: !Sub |
                 EC2ID=$(curl -fs http://169.254.169.254/latest/meta-data/instance-id) &&
                 /usr/local/bin/aws lambda invoke
                 --region '${AWS::Region}'
@@ -880,10 +880,10 @@ Resources:
           Ebs:
             VolumeSize: !Ref SwarmManagerVolumeSize
             VolumeType: gp3
-      SecurityGroups: 
+      SecurityGroups:
       - !Ref SwarmSecurityGroup
-      UserData: 
-        'Fn::Base64': !Sub 
+      UserData:
+        'Fn::Base64': !Sub
         - |
           #!/bin/bash -xe
           set -x
@@ -900,7 +900,7 @@ Resources:
         - EfsFileSystemId: !Ref XNATEFS
   AutoScalingGroupManagers:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
-    Properties: 
+    Properties:
       VPCZoneIdentifier:
       - 'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetAPrivate'
       - 'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetBPrivate'
@@ -953,7 +953,7 @@ Resources:
         WaitOnResourceSignals: true
   AutoScalingGroupWorkers:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
-    Properties: 
+    Properties:
       VPCZoneIdentifier:
       - 'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetAPrivate'
       - 'Fn::ImportValue': !Sub '${ParentVPCStack}-SubnetBPrivate'
@@ -1006,7 +1006,7 @@ Resources:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     DependsOn:
       - AutoScalingGroupManagers
-    Metadata: 
+    Metadata:
       'AWS::CloudFormation::Init':
         configSets:
           SwarmInit:
@@ -1026,7 +1026,7 @@ Resources:
               test: "test ! -e /efs"
         setupDockerOnWorker:
           packages:
-            yum: 
+            yum:
               docker: []
             services:
               sysvinit:
@@ -1034,7 +1034,7 @@ Resources:
                   enabled: true
                   ensureRunning: true
           commands:
-            10_start_docker: 
+            10_start_docker:
               command: |
                 systemctl start docker
         joinSwarmCluster:
@@ -1066,11 +1066,11 @@ Resources:
       - DeviceName: "/dev/xvda"
         Ebs:
           VolumeSize: !Ref SwarmWorkerVolumeSize
-          VolumeType: gp3     
-      SecurityGroups: 
+          VolumeType: gp3
+      SecurityGroups:
       - !Ref SwarmSecurityGroup
-      UserData: 
-        'Fn::Base64': !Sub 
+      UserData:
+        'Fn::Base64': !Sub
         - |
           #!/bin/bash -xe
           # set localtime
@@ -1096,9 +1096,9 @@ Resources:
       EvaluationPeriods: 1
       Dimensions:
       - Name: "Instance"
-        Value: 
+        Value:
           !Join
-            - '_' 
+            - '_'
             - - !Ref Lifecycle
               - 'instance'
       - Name: "Application"
@@ -1128,9 +1128,9 @@ Resources:
       EvaluationPeriods: 2
       Dimensions:
       - Name: "Instance"
-        Value: 
+        Value:
           !Join
-            - '_' 
+            - '_'
             - - !Ref Lifecycle
               - 'instance'
       - Name: "Application"
@@ -1167,5 +1167,3 @@ Outputs:
   LoadBalancerMgrFullName:
     Description: LoadBalancer DNS name for Swarm cluster
     Value: !GetAtt LoadBalancerMgr.DNSName
-  
-

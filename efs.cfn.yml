@@ -29,6 +29,7 @@ Parameters:
   SecurityGroupId:
     Type: String
     Description: Source security group ID
+    Default: sg-00000000000000000
   SubnetId1:
     Type: AWS::EC2::Subnet::Id
     Description: EFS Mount target subnet
@@ -67,6 +68,7 @@ Resources:
 
   efsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Condition: hasSecurityGroupId
     Properties:
       GroupDescription: EFS mount access
       VpcId: !Ref VpcId
@@ -76,6 +78,7 @@ Resources:
 
   securityGroupIngress:
     Type: AWS::EC2::SecurityGroupIngress
+    Condition: hasSecurityGroupId
     Properties:
       Description: Allow NFSv4 access
       FromPort: 2049
@@ -116,6 +119,7 @@ Outputs:
   SecurityGroupId: {Description: Security group ID, Value: !Ref efsSecurityGroup}
 
 Conditions:
+  hasSecurityGroupId: !Not [!Equals [sg-00000000000000000, !Ref SecurityGroupId]]
   hasSubnetId1: !Not [!Equals [subnet-00000000000000000, !Ref SubnetId1]]
   hasSubnetId2: !Not [!Equals [subnet-00000000000000000, !Ref SubnetId2]]
   hasSubnetId3: !Not [!Equals [subnet-00000000000000000, !Ref SubnetId3]]

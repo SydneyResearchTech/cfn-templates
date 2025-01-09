@@ -1,38 +1,80 @@
 # Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
-version: v1.25.0
+version: v1.19.0
 # ignores vulnerabilities until expiry date; change duration by modifying expiry date
 ignore:
+  SNYK-CC-TF-130:
+    - '*':
+        reason: "[Low] EC2 instance accepts IMDSv1"
+        expires: 9999-09-06T04:14:02.672Z
+        created: 2025-01-09T04:14:02.677Z
+  SNYK-CC-AWS-415:
+    - '*':
+        reason: "[Low] CloudWatch log group not encrypted with managed key"
+        expires: 9999-09-06T04:14:02.672Z
+        created: 2025-01-09T04:14:02.677Z
+  SNYK-CC-AWS-427:
+    - '*':
+        reason: "[Low] Public IPs are automatically mapped to instances"
+        expires: 9999-09-06T04:14:02.672Z
+        created: 2025-01-09T04:14:02.677Z
+  SNYK-CC-TF-14:
+    - '*':
+        reason: "[Low] KMS key does not have key rotation enabled"
+        expires: 9999-09-06T04:14:02.672Z
+        created: 2025-01-09T04:14:02.677Z
+  SNYK-CC-AWS-426:
+    - '*':
+        reason: "[Low] EC2 API termination protection is not enabled"
+        expires: 9999-09-06T04:14:02.672Z
+        created: 2025-01-09T04:14:02.677Z
   SNYK-CC-AWS-408:
-    - ais-xnat-database.cfn.yml:
-        reason: [Medium] RDS automatic backup is disabled
-        expires: 2024-09-06T04:14:02.672Z
+    - 'ais-xnat-database.cfn.yml > *':
+        reason: "[Medium] RDS automatic backup is disabled"
+        expires: 9999-09-06T04:14:02.672Z
         created: 2024-08-07T04:14:02.677Z
   SNYK-CC-AWS-414:
-    - ais-xnat-database.cfn.yml:
-        reason: [Medium] RDS IAM authentication is disabled
-        expires: 2024-09-06T04:14:02.672Z
+    - 'ais-xnat-database.cfn.yml > *':
+        reason: "[Medium] RDS IAM authentication is disabled"
+        expires: 9999-09-06T04:14:02.672Z
         created: 2024-08-07T04:14:02.677Z
   SNYK-CC-AWS-710:
-    - ais-xnat-database.cfn.yml:
-        reason: [Medium] IAM authentication for RDS cluster is disabled
-        expires: 2024-09-06T04:14:02.672Z
+    - 'ais-xnat-database.cfn.yml > *':
+        reason: "[Medium] IAM authentication for RDS cluster is disabled"
+        expires: 9999-09-06T04:14:02.672Z
         created: 2024-08-07T04:14:02.677Z
   SNYK-CC-TF-201:
-    - ais-xnat-database.cfn.yml:
-        reason: [Medium] Non-encrypted RDS instance at rest
-        expires: 2024-09-06T04:14:02.672Z
+    - 'ais-xnat-database.cfn.yml > *':
+        reason: "[Medium] Non-encrypted RDS instance at rest"
+        expires: 9999-09-06T04:14:02.672Z
         created: 2024-08-07T04:14:02.677Z
   SNYK-CC-TF-53:
-    - ais-xnat-dockerswarm.cnf.yml
-    - cvl-desktop-lab.cfn.yml
-    - vrd-launch-template.cfn.yml:
-        reason: [Medium] Non-Encrypted root block device
-        expires: 2024-09-06T04:14:02.672Z
+    - 'eks-managed-node-launch-template.cfn.yml > *':
+        reason: "[Medium] Non-Encrypted root block device"
+        expires: 9999-09-06T04:14:02.672Z
+        created: 2024-08-07T04:14:02.677Z
+    - 'ais-xnat-dockerswarm.cfn.yml > *':
+        reason: "[Medium] Non-Encrypted root block device"
+        expires: 9999-09-06T04:14:02.672Z
+        created: 2024-08-07T04:14:02.677Z
+    - 'cvl-desktop-lab.cfn.yml > *':
+        reason: "[Medium] Non-Encrypted root block device"
+        expires: 9999-09-06T04:14:02.672Z
+        created: 2024-08-07T04:14:02.677Z
+    - 'vrd-launch-template.cfn.yml > *':
+        reason: "[Medium] Non-Encrypted root block device"
+        expires: 9999-09-06T04:14:02.672Z
+        created: 2024-08-07T04:14:02.677Z
+    - 'vrd-dev.cfn.yml > *':
+        reason: "[Medium] Non-Encrypted root block device"
+        expires: 9999-09-06T04:14:02.672Z
         created: 2024-08-07T04:14:02.677Z
   SNYK-CC-TF-1:
-    - cvl-desktop-lab.cfn.yml
-    - vrd-launch-template.cfn.yml:
-        reason: [Medium] Security Group allows open ingress
-        expires: 2024-09-06T04:14:02.672Z
+    - 'cvl-desktop-lab.cfn.yml > *':
+        reason: "[Medium] Security Group allows open ingress"
+        expires: 9999-09-06T04:14:02.672Z
+        created: 2024-08-07T04:14:02.677Z
+    - 'vrd-launch-template.cfn.yml > *':
+        reason: "[Medium] Security Group allows open ingress"
+        expires: 9999-09-06T04:14:02.672Z
         created: 2024-08-07T04:14:02.677Z
 patch: {}

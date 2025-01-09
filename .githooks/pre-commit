@@ -50,8 +50,6 @@ fi
 #exec git diff-index --check --cached $against --
 git diff-index --check --cached $against -- || EXIT_CODE=$?
 
-which snyk &>/dev/null && snyk iac test
-
-exit 1
+which snyk &>/dev/null && snyk iac test || EXIT_CODE=$?
 
 exit $EXIT_CODE
