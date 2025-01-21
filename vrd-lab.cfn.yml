@@ -1,4 +1,5 @@
 ---
+# aws cloudformation create-stack --stack-name $STACK_NAME
 AWSTemplateFormatVersion: "2010-09-09"
 Description: VRD lab
 Parameters:
@@ -12,21 +13,187 @@ Parameters:
     Default: 0
   LaunchTemplateName:
     Type: String
+    Default: vrd-launch-template
   LaunchTemplateVersion:
     Type: Number
+    Default: 1
+  VpcId:
+    Type: String
+    # Type: "AWS::EC2::VPC::Id"
+    Default: "vpc-00000000000000000"
 
-Conditions: {}
+Conditions:
+  createVpc: !Equals [!Ref VpcId, "vpc-00000000000000000"]
 
-Outputs: {}
+Outputs:
+  Ipv6CidrBlock: {Value: !Select [0, !GetAtt ["Vpc","Ipv6CidrBlocks"]]}
+  PrimaryCidrBlock: {Value: !GetAtt ["Vpc","CidrBlock"]}
+  VpcId: {Value: !Ref Vpc}
+  Subnet0: {Value: !Ref Subnet0}
+  Subnet1: {Value: !Ref Subnet1}
+  Subnet2: {Value: !Ref Subnet2}
 
 Resources:
-  AutoScaleGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
+  #AutoScaleGroup:
+  #  Type: AWS::AutoScaling::AutoScalingGroup
+  #  DependsOn: LaunchTemplate
+  #  Properties:
+  #    AvailabilityZones: !Ref AvailabilityZones
+  #    DesiredCapacity: !Ref ASGDesiredCapacity
+  #    LaunchTemplate:
+  #      LaunchTemplateName: !Ref LaunchTemplateName
+  #      Version: !Ref LaunchTemplateVersion
+  #    MaxSize: 24
+  #    MinSize: 0
+  #    Tags:
+  #      - {Key: "uni:billing:application", Value: "xnat", PropagateAtLaunch: true}
+
+  # aws cloudformation create-stack
+  #LaunchTemplate:
+  #  Type: AWS::CloudFormation::Stack
+  #  Properties:
+  #    Capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"]
+  #    TemplateURL: https://raw.githubusercontent.com/SydneyResearchTech/cfn-templates/refs/heads/main/vrd-launch-template.cfn.yml
+  #    Parameters:
+  #      ImageId: ami-0b4387dd850b3a1ef
+  #      KeyName: dean.taylor@sydney.edu.au
+  #      SubnetID: !Ref Subnet0
+  #      VpcId: !Ref Vpc
+
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-subnet.html#cfn-ec2-subnet-ipv6cidrblock
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference-cidr.html
+  Subnet0:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - VpcCidrBlockIpv6
     Properties:
-      AvailabilityZones: !Ref AvailabilityZones
-      DesiredCapacity: !Ref ASGDesiredCapacity
-      LaunchTemplate:
-        LaunchTemplateName: !Ref LaunchTemplateName
-        Version: !Ref LaunchTemplateVersion
-      MaxSize: 24
-      MinSize: 0
+      AssignIpv6AddressOnCreation: true
+      AvailabilityZone: !Select [0, !Ref AvailabilityZones]
+      CidrBlock: 10.0.0.0/24
+      #CidrBlock: !Select [0, !Cidr [!GetAttr ["Vpc", "CidrBlock"], 3, 8]]
+      EnableDns64: false
+      Ipv6CidrBlock: !Select [0, !Cidr [!Select [0, !GetAtt ["Vpc", "Ipv6CidrBlocks"]], 3, 64]]
+      Ipv6Native: false
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - {Key: "sydney.edu.au/contact", Value: "ais.admin@sydney.edu.au"}
+        - {Key: "sydney.edu.au/createdBy", Value: "dean.taylor@sydney.edu.au"}
+        - {Key: "sydney.edu.au/environment", Value: "development"}
+        - {Key: "sydney.edu.au/ou", Value: "Research Technology"}
+  Subnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - VpcCidrBlockIpv6
+    Properties:
+      AssignIpv6AddressOnCreation: true
+      AvailabilityZone: !Select [1, !Ref AvailabilityZones]
+      CidrBlock: 10.0.1.0/24
+      #CidrBlock: !Select [1, !Cidr [!GetAttr ["Vpc", "CidrBlock"], 3, 8]]
+      EnableDns64: false
+      Ipv6CidrBlock: !Select [1, !Cidr [!Select [0, !GetAtt ["Vpc", "Ipv6CidrBlocks"]], 3, 64]]
+      Ipv6Native: false
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - {Key: "sydney.edu.au/contact", Value: "ais.admin@sydney.edu.au"}
+        - {Key: "sydney.edu.au/createdBy", Value: "dean.taylor@sydney.edu.au"}
+        - {Key: "sydney.edu.au/environment", Value: "development"}
+        - {Key: "sydney.edu.au/ou", Value: "Research Technology"}
+  Subnet2:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - VpcCidrBlockIpv6
+    Properties:
+      AssignIpv6AddressOnCreation: true
+      AvailabilityZone: !Select [2, !Ref AvailabilityZones]
+      CidrBlock: 10.0.2.0/24
+      #CidrBlock: !Select [2, !Cidr [!GetAttr ["Vpc", "CidrBlock"], 3, 8]]
+      EnableDns64: false
+      Ipv6CidrBlock: !Select [2, !Cidr [!Select [0, !GetAtt ["Vpc", "Ipv6CidrBlocks"]], 3, 64]]
+      Ipv6Native: false
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - {Key: "sydney.edu.au/contact", Value: "ais.admin@sydney.edu.au"}
+        - {Key: "sydney.edu.au/createdBy", Value: "dean.taylor@sydney.edu.au"}
+        - {Key: "sydney.edu.au/environment", Value: "development"}
+        - {Key: "sydney.edu.au/ou", Value: "Research Technology"}
+
+  Subnet0RouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      SubnetId: !Ref Subnet0
+  Subnet1RouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      SubnetId: !Ref Subnet1
+  Subnet2RouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      SubnetId: !Ref Subnet2
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - {Key: "sydney.edu.au/contact", Value: "ais.admin@sydney.edu.au"}
+        - {Key: "sydney.edu.au/createdBy", Value: "dean.taylor@sydney.edu.au"}
+        - {Key: "sydney.edu.au/environment", Value: "development"}
+        - {Key: "sydney.edu.au/ou", Value: "Research Technology"}
+
+  VpcCidrBlockIpv6:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      AmazonProvidedIpv6CidrBlock: true
+      VpcId: !Ref Vpc
+
+  RouteTablePublic:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+
+  RouteToInternet:
+    Type: AWS::EC2::Route
+    DependsOn:
+      - VpcGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref RouteTablePublic
+
+  RouteToInternetIpv6:
+    Type: AWS::EC2::Route
+    DependsOn:
+      - VpcGatewayAttachment
+    Properties:
+      DestinationIpv6CidrBlock: ::/0
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyInternetGateway
+      RouteTableId: !Ref RouteTablePublic
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+      # VpnGatewayId:
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - {Key: "sydney.edu.au/contact", Value: "ais.admin@sydney.edu.au"}
+        - {Key: "sydney.edu.au/createdBy", Value: "dean.taylor@sydney.edu.au"}
+        - {Key: "sydney.edu.au/environment", Value: "development"}
+        - {Key: "sydney.edu.au/ou", Value: "Research Technology"}
+
+  EgressOnlyInternetGateway:
+    Type: AWS::EC2::EgressOnlyInternetGateway
+    Properties:
+      VpcId: !Ref Vpc

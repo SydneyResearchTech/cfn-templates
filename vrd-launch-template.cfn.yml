@@ -4,9 +4,9 @@ Parameters:
   Billing:
     Description: "Billing application code"
     Type: String
-    Default: "rtek"
+    Default: "xnat"
   CreatedBy:
-    Descritpion: "Group or individual deploying this service"
+    Description: "Group or individual deploying this service"
     Type: String
     Default: "dean.taylor@sydney.edu.au"
   Environment:
@@ -81,7 +81,8 @@ Resources:
               - {Key: "uni:billing:support",Value: "unmanaged"}
               - {Key: "uni:operations:backup", Value: "none"}
               - {Key: sydney.edu.au/ou, Value: "Research Technology"}
-              - {Key: sydney.edu.au/resTek/ansibleGroups, Value: !Ref AnsibleGroups}
+              - {Key: sydney.edu.au/resTek/ansibleGroups, Value: !Ref Groups}
+              - {Key: sydney.edu.au/resTek/contact, Value: "ais.admin@sydney.edu.au"}
               - {Key: sydney.edu.au/resTek/createdBy, Value: !Ref CreatedBy}
               - {Key: sydney.edu.au/resTek/environment, Value: !Ref Environment}
         UserData:
