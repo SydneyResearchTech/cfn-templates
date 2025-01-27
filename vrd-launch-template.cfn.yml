@@ -39,9 +39,15 @@ Parameters:
     Default: ""
 
 Outputs:
+  DefaultVersionNumber:
+    Value: !GetAtt EC2LaunchTemplate.DefaultVersionNumber
   InstanceProfileArn:
     Description: EC2 instance profile ARN
     Value: !GetAtt InstanceProfile.Arn
+  LatestVersionNumber:
+    Value: !GetAtt EC2LaunchTemplate.LatestVersionNumber
+  LaunchTemplateId:
+    Value: !GetAtt EC2LaunchTemplate.LaunchTemplateId
   RoleArn:
     Description: EC2 instance role ARN
     Value: !GetAtt InstanceRole.Arn
@@ -92,9 +98,12 @@ Resources:
               install_method: pip
               ansible_config: /etc/ansible/ansible.cfg
               package_name: ansible
+              run_user: ubuntu
               setup_controller:
                 run_ansible:
-                  - playbook_name: restek.core.microk8s_dev_env
+                  - playbook_name: microk8s_dev_env.yaml
+                    playbook_dir: /home/ubuntu/.ansible/collections/ansible_collections/restek/core/playbooks
+                    inventory: /etc/ansible/hosts.yml
               galaxy:
                 actions:
                   - ["ansible-galaxy","install","-r","/etc/ansible/requirements.yml"]
@@ -115,8 +124,8 @@ Resources:
             - - /bin/bash
               - -c
               - |
-                mkdir -p /etc/ansible
-                cat <<EOT >/etc/ansible/hosts.yml
+                mkdir -p /etc/ansible/hosts
+                cat <<EOT >/etc/ansible/hosts/localhost.yml
                 all:
                   hosts:
                     $(hostname --fqdn):
@@ -128,7 +137,8 @@ Resources:
             write_files:
             - content: |
                 [defaults]
-                inventory = /etc/ansible/hosts.yml
+                inventory = /etc/ansible/hosts
+                log_path = ~/.ansible/log
                 [ssh_connection]
                 ssh_args = -o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=/tmp/%r@%h:%p
               path: /etc/ansible/ansible.cfg
