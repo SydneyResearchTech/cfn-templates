@@ -103,7 +103,7 @@ Resources:
                 run_ansible:
                   - playbook_name: microk8s_dev_env.yaml
                     playbook_dir: /home/ubuntu/.ansible/collections/ansible_collections/restek/core/playbooks
-                    inventory: /etc/ansible/hosts.yml
+                    extra_vars: target=localhost
               galaxy:
                 actions:
                   - ["ansible-galaxy","install","-r","/etc/ansible/requirements.yml"]
@@ -125,11 +125,9 @@ Resources:
               - -c
               - |
                 mkdir -p /etc/ansible/hosts
-                cat <<EOT >/etc/ansible/hosts/localhost.yml
-                all:
-                  hosts:
-                    $(hostname --fqdn):
-                      ansible_connection: local
+                cat <<EOT >/etc/ansible/hosts/localhost
+                [ungrouped]
+                $(hostname --fqdn) ansible_connection=local
                 EOT
             #ssh_authorized_keys: []
             ssh_pwauth: false
@@ -139,6 +137,8 @@ Resources:
                 [defaults]
                 inventory = /etc/ansible/hosts
                 log_path = ~/.ansible/log
+                [inventory]
+                enable_plugins = ini,yaml
                 [ssh_connection]
                 ssh_args = -o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=/tmp/%r@%h:%p
               path: /etc/ansible/ansible.cfg
