@@ -130,6 +130,9 @@ Resources:
                 $(hostname --fqdn) ansible_connection=local
                 EOT
             #ssh_authorized_keys: []
+            ssh_import_id:
+            - gh:dean-taylor
+            - gh:fxusyd
             ssh_pwauth: false
             timezone: Australia/Sydney
             write_files:
