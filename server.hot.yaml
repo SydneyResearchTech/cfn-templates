@@ -44,7 +44,11 @@ resources:
         volume_size: {get_param: volume_size}
       key_name: {get_param: key_name}
       metadata: {get_param: metadata}
-      #name: test-server-c4a8d2b826a0
+      name:
+        str_replace:
+          template: ip-${HOST_IP}
+          params:
+            ${HOST_IP}: {list_join: ['-', {str_split: ['.', {get_attr: [serverPort, fixed_ips, 0, ip_address]}]}]}
       networks:
       - floating_ip: {get_resource: externalIp}
         port: {get_resource: serverPort}
@@ -60,14 +64,15 @@ resources:
       user_data: |
         #cloud-config
         keyboard:
-          layout: US
+          layout: us
         locale: en_AU.utf8
         package_update: true
         package_upgrade: true
         package_reboot_if_required: true
         timezone: Australia/Sydney
       user_data_format: RAW
-      user_data_update_policy: IGNORE
+      user_data_update_policy: REPLACE
+      #user_data_update_policy: IGNORE
 
   externalIp:
     type: OS::Neutron::FloatingIP
