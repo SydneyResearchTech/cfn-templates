@@ -1,0 +1,23 @@
+# https://docs.redhat.com/en/documentation/red_hat_openstack_platform/16.0/epub/auto_scaling_for_instances/index#orchestration
+heat_template_version: 2021-04-16
+description: >
+  Kubernetes cluster autoscale group
+
+parameters:
+  flavor:
+    type: string
+    default: c3.4c8m10d
+
+resources:
+  scaleupGroup:
+    type: OS::Heat::AutoScalingGroup
+    properties:
+      max_size: 3
+      min_size: 1
+      desired_capacity: 1
+      cooldown: 300
+      resource:
+        type: OS::Nova::Server::ResTek
+        properties:
+          metadata: {"metering.server_group": {get_param: "OS::stack_id"}}
+          flavor: {get_param: flavor}

@@ -1,0 +1,84 @@
+heat_template_version: 2021-04-16
+description: >
+  Ubuntu server deployment
+
+parameters:
+  allowed_address_pairs:
+    type: json
+    default:
+      - {ip_address: 10.0.0.0/8}
+      - {ip_address: 172.16.0.0/12}
+      - {ip_address: 192.168.0.0/16}
+  flavor:
+    type: string
+    default: c3.8c16m10d
+  floating_network:
+    type: string
+    default: external
+  image:
+    type: string
+    default: Ubuntu Noble Server 2024-10-04
+  key_name:
+    type: string
+    default: dean_taylor_sydney_edu_au
+  metadata:
+    type: json
+  network:
+    type: string
+    default: er01
+  security_groups:
+    type: json
+    default: ["er01 ssh"]
+  volume_size:
+    type: number
+    default: 50
+
+resources:
+  server:
+    type: OS::Nova::Server
+    properties:
+      flavor: {get_param: flavor}
+      block_device_mapping_v2:
+      - delete_on_termination: true
+        image: {get_param: image}
+        volume_size: {get_param: volume_size}
+      key_name: {get_param: key_name}
+      metadata: {get_param: metadata}
+      #name: test-server-c4a8d2b826a0
+      networks:
+      - floating_ip: {get_resource: externalIp}
+        port: {get_resource: serverPort}
+      # https://bugs.launchpad.net/ubuntu/+source/heat/+bug/2085409
+      #- floating_ip: {get_resource: externalIp}
+      #  #network: er01
+      #  port_extra_properties:
+      #    allowed_address_pairs:
+      #      - {ip_address: 10.0.0.0/16}
+      #    port_security_enabled: true
+      #  subnet: er01
+      tags: []
+      user_data: |
+        #cloud-config
+        keyboard:
+          layout: US
+        locale: en_AU.utf8
+        package_update: true
+        package_upgrade: true
+        package_reboot_if_required: true
+        timezone: Australia/Sydney
+      user_data_format: RAW
+      user_data_update_policy: IGNORE
+
+  externalIp:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: {get_param: floating_network}
+
+  serverPort:
+    type: OS::Neutron::Port
+    properties:
+      network: {get_param: network}
+      admin_state_up: true
+      allowed_address_pairs: {get_param: allowed_address_pairs}
+      port_security_enabled: true
+      security_groups: {get_param: security_groups}
