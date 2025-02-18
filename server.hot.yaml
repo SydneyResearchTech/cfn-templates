@@ -29,19 +29,23 @@ parameters:
   security_groups:
     type: json
     default: ["er01 ssh"]
+  ssh_import_id:
+    type: json
+    default: []
   volume_size:
     type: number
     default: 50
+  volume_type:
+    type: string
+    default: Nirin2_General
+    #default: "__DEFAULT__"
+    #default: Nirin2_Transaction
 
 resources:
   server:
     type: OS::Nova::Server
     properties:
       flavor: {get_param: flavor}
-      block_device_mapping_v2:
-      - delete_on_termination: true
-        image: {get_param: image}
-        volume_size: {get_param: volume_size}
       key_name: {get_param: key_name}
       metadata: {get_param: metadata}
       name:
@@ -49,30 +53,47 @@ resources:
           template: ip-${HOST_IP}
           params:
             ${HOST_IP}: {list_join: ['-', {str_split: ['.', {get_attr: [serverPort, fixed_ips, 0, ip_address]}]}]}
+      image: {get_param: image}
+      block_device_mapping_v2:
+      - boot_index: -1
+        delete_on_termination: true
+        volume_id: {get_resource: microk8sVolume}
       networks:
       - floating_ip: {get_resource: externalIp}
         port: {get_resource: serverPort}
-      # https://bugs.launchpad.net/ubuntu/+source/heat/+bug/2085409
-      #- floating_ip: {get_resource: externalIp}
-      #  #network: er01
-      #  port_extra_properties:
-      #    allowed_address_pairs:
-      #      - {ip_address: 10.0.0.0/16}
-      #    port_security_enabled: true
-      #  subnet: er01
       tags: []
-      user_data: |
-        #cloud-config
-        keyboard:
-          layout: us
-        locale: en_AU.utf8
-        package_update: true
-        package_upgrade: true
-        package_reboot_if_required: true
-        timezone: Australia/Sydney
+      user_data:
+        str_replace:
+          template: |
+            #cloud-config
+            keyboard:
+              layout: us
+            locale: en_AU.utf8
+            mounts:
+            -
+              - /dev/disk/by-id/virtio-${VOLUME_ID}
+              - /var/snap/microk8s/common
+              - ext4
+              - defaults,nofail,x-systemd.after=cloud-init-network.service,x-systemd.makefs
+            package_update: true
+            package_upgrade: true
+            package_reboot_if_required: true
+            #ssh_import_id: {get_param: ssh_import_id}
+            timezone: Australia/Sydney
+          params:
+            ${VOLUME_ID}:
+              yaql:
+                expression: $.data.volume_id.substring(0,20)
+                data:
+                  volume_id: {get_resource: microk8sVolume}
       user_data_format: RAW
-      user_data_update_policy: REPLACE
-      #user_data_update_policy: IGNORE
+      user_data_update_policy: IGNORE
+
+  microk8sVolume:
+    type: OS::Cinder::Volume
+    properties:
+      size: {get_param: volume_size}
+      volume_type: {get_param: volume_type}
 
   externalIp:
     type: OS::Neutron::FloatingIP
