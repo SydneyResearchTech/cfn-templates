@@ -29,16 +29,12 @@ parameters:
   security_groups:
     type: json
     default: ["er01 ssh"]
-  ssh_import_id:
-    type: json
-    default: []
   volume_size:
     type: number
-    default: 50
+    default: 10
   volume_type:
     type: string
     default: Nirin2_General
-    #default: "__DEFAULT__"
     #default: Nirin2_Transaction
 
 resources:
@@ -66,26 +62,36 @@ resources:
         str_replace:
           template: |
             #cloud-config
+            fs_setup:
+            - label: microk8s
+              filesystem: xfs
+              device: ${VOLUME_PATH}
             keyboard:
               layout: us
             locale: en_AU.utf8
             mounts:
             -
-              - /dev/disk/by-id/virtio-${VOLUME_ID}
+              - ${VOLUME_PATH}
               - /var/snap/microk8s/common
-              - ext4
-              - defaults,nofail,x-systemd.after=cloud-init-network.service,x-systemd.makefs
             package_update: true
             package_upgrade: true
             package_reboot_if_required: true
-            #ssh_import_id: {get_param: ssh_import_id}
             timezone: Australia/Sydney
+            write_files:
+            - path: /etc/systemd/journald.conf.d/syslog.conf
+              content: |
+                [Journal]
+                ForwardToSyslog=no
           params:
-            ${VOLUME_ID}:
-              yaql:
-                expression: $.data.volume_id.substring(0,20)
-                data:
-                  volume_id: {get_resource: microk8sVolume}
+            ${VOLUME_PATH}:
+              str_replace:
+                template: /dev/disk/by-id/virtio-${VOLUME_ID}
+                params:
+                  ${VOLUME_ID}:
+                    yaql:
+                      expression: $.data.volume_id.substring(0,20)
+                      data:
+                        volume_id: {get_resource: microk8sVolume}
       user_data_format: RAW
       user_data_update_policy: IGNORE
 
