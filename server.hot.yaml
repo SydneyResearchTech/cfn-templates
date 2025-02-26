@@ -26,6 +26,12 @@ parameters:
   network:
     type: string
     default: er01
+  os_project:
+    type: string
+    default: er01
+  os_provider:
+    type: string
+    default: nci
   security_groups:
     type: json
     default: ["er01 ssh"]
@@ -46,9 +52,11 @@ resources:
       metadata: {get_param: metadata}
       name:
         str_replace:
-          template: ip-${HOST_IP}
+          template: ip-${HOST_IP}.${OS_PROJECT}.${OS_PROVIDER}.sydney.edu.au
           params:
             ${HOST_IP}: {list_join: ['-', {str_split: ['.', {get_attr: [serverPort, fixed_ips, 0, ip_address]}]}]}
+            ${OS_PROJECT}: {get_param: os_project}
+            ${OS_PROVIDER}: {get_param: os_provider}
       image: {get_param: image}
       block_device_mapping_v2:
       - boot_index: -1
