@@ -52,7 +52,7 @@ resources:
       metadata: {get_param: metadata}
       name:
         str_replace:
-          template: ip-${HOST_IP}.${OS_PROJECT}.${OS_PROVIDER}.sydney.edu.au
+          template: ip-${HOST_IP}.${OS_PROVIDER}-${OS_PROJECT}.sydney.edu.au
           params:
             ${HOST_IP}: {list_join: ['-', {str_split: ['.', {get_attr: [serverPort, fixed_ips, 0, ip_address]}]}]}
             ${OS_PROJECT}: {get_param: os_project}
@@ -74,6 +74,8 @@ resources:
             - label: microk8s
               filesystem: xfs
               device: ${VOLUME_PATH}
+            hostname: ${HOSTNAME}
+            fqdn: ${HOSTNAME}.${DOMAIN}
             keyboard:
               layout: us
             locale: en_AU.utf8
@@ -86,11 +88,26 @@ resources:
             package_reboot_if_required: true
             timezone: Australia/Sydney
             write_files:
+            - path: /etc/sysctl.d/99-forwarding.conf
+              content: |
+                net.ipv4.ip_forward=1
+                net.ipv6.conf.all.forwarding=1
             - path: /etc/systemd/journald.conf.d/syslog.conf
               content: |
                 [Journal]
                 ForwardToSyslog=no
           params:
+            ${DOMAIN}:
+              str_replace:
+                template: ${OS_PROVIDER}-${OS_PROJECT}.sydney.edu.au
+                params:
+                  ${OS_PROJECT}: {get_param: os_project}
+                  ${OS_PROVIDER}: {get_param: os_provider}
+            ${HOSTNAME}:
+              str_replace:
+                template: ip-${HOST_IP}
+                params:
+                  ${HOST_IP}: {list_join: ['-', {str_split: ['.', {get_attr: [serverPort, fixed_ips, 0, ip_address]}]}]}
             ${VOLUME_PATH}:
               str_replace:
                 template: /dev/disk/by-id/virtio-${VOLUME_ID}

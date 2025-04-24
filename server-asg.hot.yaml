@@ -1,3 +1,4 @@
+# https://docs.openstack.org/heat/latest/template_guide/openstack.html
 # https://docs.redhat.com/en/documentation/red_hat_openstack_platform/16.0/epub/auto_scaling_for_instances/index#orchestration
 heat_template_version: 2021-04-16
 description: >
@@ -7,10 +8,20 @@ parameters:
   flavor:
     type: string
     default: c3.4c8m10d
+  router:
+    type: string
+    default: er01
+  subnetpoolv4:
+    type: string
+    default: default-pool-ipv4
+  subnetpoolv6:
+    type: string
+    default: default-pool-ipv6
 
 resources:
   scaleupGroup:
     type: OS::Heat::AutoScalingGroup
+    depends_on: [subnetV6,subnetV4]
     properties:
       max_size: 3
       min_size: 1
@@ -21,3 +32,45 @@ resources:
         properties:
           metadata: {"metering.server_group": {get_param: "OS::stack_id"}}
           flavor: {get_param: flavor}
+          network: {get_resource: network}
+
+  network:
+    type: OS::Neutron::Net
+    properties:
+      admin_state_up: true
+      name: {get_param: "OS::stack_name"}
+      port_security_enabled: true
+
+  subnetV6:
+    type: OS::Neutron::Subnet
+    properties:
+      network: {get_resource: network}
+      enable_dhcp: false
+      ip_version: 6
+      ipv6_address_mode: slaac
+      ipv6_ra_mode: slaac
+      name:
+        str_replace:
+          template: ${STACK_NAME}v6
+          params:
+            ${STACK_NAME}: {get_param: "OS::stack_name"}
+      subnetpool: {get_param: subnetpoolv6}
+
+  subnetV4:
+    type: OS::Neutron::Subnet
+    properties:
+      network: {get_resource: network}
+      enable_dhcp: true
+      ip_version: 4
+      name:
+        str_replace:
+          template: ${STACK_NAME}v4
+          params:
+            ${STACK_NAME}: {get_param: "OS::stack_name"}
+      subnetpool: {get_param: subnetpoolv4}
+
+  routerInterface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: {get_param: router}
+      subnet: {get_resource: subnetV4}
