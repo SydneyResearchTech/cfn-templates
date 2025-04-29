@@ -1,0 +1,27 @@
+heat_template_version: 2021-04-16
+description: >
+  Ubuntu server deployment
+
+parameters:
+  network:
+    type: string
+
+outputs:
+  fixed_ip_address:
+    value: {get_attr: ["floatingIP", "fixed_ip_address"]}
+  floating_ip_address:
+    value: {get_attr: ["floatingIP", "floating_ip_address"]}
+
+resources:
+  port:
+    type: OS::Neutron::Port
+    properties:
+      network: {get_param: network}
+      admin_state_up: true
+      name: {get_param: "OS::stack_name"}
+
+  floatingIP:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: external
+      port_id: {get_resource: port}

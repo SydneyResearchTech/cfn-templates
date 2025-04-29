@@ -43,7 +43,10 @@ resources:
     properties:
       flavor: {get_param: flavor}
       key_name: {get_param: key_name}
-      metadata: {get_param: metadata}
+      metadata:
+        map_merge:
+          - {get_param: metadata}
+          - {port_id: {get_resource: serverPort}}
       name:
         str_replace:
           template: ip-${HOST_IP}.${OS_PROVIDER}-${OS_PROJECT}.sydney.edu.au
