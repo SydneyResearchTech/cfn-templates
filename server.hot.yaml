@@ -3,12 +3,6 @@ description: >
   Ubuntu server deployment
 
 parameters:
-  allowed_address_pairs:
-    type: json
-    default:
-      - {ip_address: 10.0.0.0/8}
-      - {ip_address: 172.16.0.0/12}
-      - {ip_address: 192.168.0.0/16}
   flavor:
     type: string
     default: c3.8c16m10d
@@ -136,6 +130,5 @@ resources:
     properties:
       network: {get_param: network}
       admin_state_up: true
-      allowed_address_pairs: {get_param: allowed_address_pairs}
       port_security_enabled: true
       security_groups: {get_param: security_groups}
