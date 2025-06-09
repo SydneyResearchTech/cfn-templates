@@ -68,7 +68,7 @@ Resources:
 
   efsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
-    Condition: hasSecurityGroupId
+    Condition: noSecurityGroupId
     Properties:
       GroupDescription: EFS mount access
       VpcId: !Ref VpcId
@@ -119,6 +119,7 @@ Outputs:
   SecurityGroupId: {Description: Security group ID, Value: !Ref efsSecurityGroup}
 
 Conditions:
+  noSecurityGroupId: !Equals [sg-00000000000000000, !Ref SecurityGroupId]
   hasSecurityGroupId: !Not [!Equals [sg-00000000000000000, !Ref SecurityGroupId]]
   hasSubnetId1: !Not [!Equals [subnet-00000000000000000, !Ref SubnetId1]]
   hasSubnetId2: !Not [!Equals [subnet-00000000000000000, !Ref SubnetId2]]
