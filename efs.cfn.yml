@@ -94,7 +94,7 @@ Resources:
       FileSystemId: !Ref efsFileSystem
       SubnetId: !Ref SubnetId1
       SecurityGroups:
-        - !Ref efsSecurityGroup
+        - !If [hasSecurityGroupId, !Ref SecurityGroupId, !Ref efsSecurityGroup]
   mountTarget2:
     Type: AWS::EFS::MountTarget
     Condition: hasSubnetId2
@@ -102,7 +102,7 @@ Resources:
       FileSystemId: !Ref efsFileSystem
       SubnetId: !Ref SubnetId2
       SecurityGroups:
-        - !Ref efsSecurityGroup
+        - !If [hasSecurityGroupId, !Ref SecurityGroupId, !Ref efsSecurityGroup]
   mountTarget3:
     Type: AWS::EFS::MountTarget
     Condition: hasSubnetId3
@@ -110,7 +110,7 @@ Resources:
       FileSystemId: !Ref efsFileSystem
       SubnetId: !Ref SubnetId3
       SecurityGroups:
-        - !Ref efsSecurityGroup
+        - !If [hasSecurityGroupId, !Ref SecurityGroupId, !Ref efsSecurityGroup]
 
 Outputs:
   FileSystemId: {Description: File system ID, Value: !Ref efsFileSystem}
