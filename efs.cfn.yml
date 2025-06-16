@@ -116,7 +116,9 @@ Outputs:
   FileSystemId: {Description: File system ID, Value: !Ref efsFileSystem}
   VpcId: {Description: VPC ID, Value: !Ref VpcId}
   EfsPerformanceMode: {Description: EFS Performance Mode, Value: !Ref PerformanceMode}
-  SecurityGroupId: {Description: Security group ID, Value: !Ref efsSecurityGroup}
+  SecurityGroupId:
+    Description: Security group ID
+    Value: !If [hasSecurityGroupId, !Ref SecurityGroupId, !Ref efsSecurityGroup]
 
 Conditions:
   noSecurityGroupId: !Equals [sg-00000000000000000, !Ref SecurityGroupId]
