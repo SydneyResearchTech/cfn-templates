@@ -82,9 +82,9 @@ Resources:
     Properties:
       Description: Allow NFSv4 access
       FromPort: 2049
-      GroupId: !Ref efsSecurityGroup
+      GroupId: !If [hasSecurityGroupId, !Ref SecurityGroupId, !Ref efsSecurityGroup]
       IpProtocol: tcp
-      SourceSecurityGroupId: !Ref SecurityGroupId
+      SourceSecurityGroupId: !If [hasSecurityGroupId, !Ref SecurityGroupId, !Ref efsSecurityGroup]
       ToPort: 2049
 
   mountTarget1:
