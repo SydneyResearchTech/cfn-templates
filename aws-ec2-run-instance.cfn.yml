@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  Launch EC2 instance for admin operations.
+  Scenario 1. Manage EFS services assigned to EKS clusters.
+
+Parameters:
+  AvailabilityZone:
+    Type: String
+  EfsFileSystemId:
+    Type: String
+    ConstraintDescription: "must be the name of an existing EC2 KeyPair"
+  ImageIdLatest:
+    # https://docs.aws.amazon.com/linux/al2023/ug/ec2.html#launch-via-aws-cli
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    AllowedValues:
+    - /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    - /aws/service/ami-amazon-linux-latest/al2023-ami-minimal-kernel-default-arm64
+    - /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    - /aws/service/ami-amazon-linux-latest/al2023-ami-minimal-kernel-default-x86_64
+  InstanceType:
+    Default: m6id.xlarge
+    Type: String
+  KeyName:
+    Description: "Name of an existing EC2 KeyPair to enable SSH access to the instance"
+    Type: AWS::EC2::KeyPair::KeyName
+  SecurityGroupId:
+    Type: String
+  SubnetId:
+    Type: String
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+Outputs: {}
+
+Resources:
+  Ec2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: 256
+      ImageId: !Ref ImageIdLatest
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      SecurityGroupIds:
+      - !Ref Ec2SecurityGroup
+      - !Ref SecurityGroupId
+      SubnetId: !Ref SubnetId
+      Tags:
+      - {Key: "uni:billing:application", Value: xnat}
+      - {Key: "uni:billing:managed_by",Value: uni}
+      - {Key: "uni:billing:support",Value: unmanaged}
+      - {Key: "uni:operations:backup", Value: "none"}
+      - {Key: sydney.edu.au/ou, Value: "Research Technology"}
+      - {Key: sydney.edu.au/resTek/contact, Value: "ais.admin@sydney.edu.au"}
+      - {Key: sydney.edu.au/resTek/environment, Value: support}
+      UserData:
+        Fn::Base64: !Sub
+        - |
+          #cloud-config
+          mounts:
+          -
+            - ${EFS_FILE_SYSTEM_ID}
+            - /vol/efs
+            - efs
+            - x-systemd.automount,_netdev,tls
+            - "0"
+            - "0"
+          packages:
+          - amazon-efs-utils
+        -
+          EFS_FILE_SYSTEM_ID: !Ref EfsFileSystemId
+
+  Ec2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EC2 instance default access
+      SecurityGroupEgress:
+      - CidrIpv6: "::/0"
+        IpProtocol: -1
+      - CidrIp: 0.0.0.0/0
+        IpProtocol: -1
+      SecurityGroupIngress:
+      - CidrIpv6: "::/0"
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+      - CidrIp: 0.0.0.0/0
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+      VpcId: !Ref VpcId
