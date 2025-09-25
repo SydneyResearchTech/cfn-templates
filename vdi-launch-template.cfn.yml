@@ -1,0 +1,202 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Virtual desktop infrastructure launch template"
+Parameters:
+  AnsibleGroups:
+    Default: "desktop,usyd,vdi"
+    Description: "Ansible groups as CSV no spaces"
+    Type: String
+  Billing:
+    Description: "Billing application code"
+    Type: String
+  CreatedBy:
+    Description: "Group or individual deploying this service"
+    Type: String
+    Default: "undefined"
+  Environment:
+    AllowedValues: ["development","production","uat"]
+    Default: "development"
+    Description: "Release environment"
+    Type: String
+  ImageId:
+    Default: "{{resolve:ssm:/restek/ubuntu/vdi/noble/stable/current/amd64/hvm/ebs-gp3/ami-id}}"
+    Description: "AMI image id"
+    Type: "AWS::EC2::Image::Id"
+  InstanceType:
+    AllowedValues: ["g4dn.xlarge"]
+    Default: g4dn.xlarge
+    Description: "EC2 instance type"
+    Type: String
+    ConstraintDescription: "must be a valid EC2 instance type."
+  KeyName:
+    Description: "Name of an existing EC2 KeyPair to enable SSH access to the instance"
+    Type: "AWS::EC2::KeyPair::KeyName"
+    ConstraintDescription: "must be the name of an existing EC2 KeyPair."
+  OrganisationalUnit:
+    Default: "Research Technology"
+    Description: "Organisation unit responsible for this launch template."
+    Type: String
+  SshImportIds:
+    Type: CommaDelimitedList
+    Default: "gh:dean-taylor,gh:fxusyd"
+  SubnetId:
+    Type: String
+  VpcId:
+    Type: "AWS::EC2::VPC::Id"
+    ConstraintDescription: "must be a valid VPC identifier."
+
+Outputs:
+  DefaultVersionNumber:
+    Value: !GetAtt EC2LaunchTemplate.DefaultVersionNumber
+  InstanceProfileArn:
+    Description: EC2 instance profile ARN
+    Value: !GetAtt InstanceProfile.Arn
+  LatestVersionNumber:
+    Value: !GetAtt EC2LaunchTemplate.LatestVersionNumber
+  LaunchTemplateId:
+    Value: !GetAtt EC2LaunchTemplate.LaunchTemplateId
+  RoleArn:
+    Description: EC2 instance role ARN
+    Value: !GetAtt InstanceRole.Arn
+  SecurityGroupId:
+    Description: Default security group ID applied to instances
+    Value: !GetAtt DefaultSecurityGroup.GroupId
+
+Transform: AWS::LanguageExtensions
+
+Resources:
+  EC2LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Ref AWS::StackName
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              DeleteOnTermination: true
+              Encrypted: true
+              VolumeSize: 256
+        IamInstanceProfile: {Name: !Ref InstanceProfile}
+        ImageId: !Ref ImageId
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyName
+        # IMDSv2 only (disable IMDSv1)
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            Groups:
+              - !GetAtt DefaultSecurityGroup.GroupId
+              - !GetAtt AllowAllSecurityGroup.GroupId
+            SubnetId: !Ref SubnetId
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - {Key: "uni:billing:application", Value: !Ref Billing}
+              - {Key: "uni:billing:managed_by",Value: "uni"}
+              - {Key: "uni:billing:support",Value: "unmanaged"}
+              - {Key: "uni:operations:backup", Value: "none"}
+              - {Key: sydney.edu.au/ou, Value: !Ref OrganisationalUnit}
+              - {Key: sydney.edu.au/resTek/ansibleGroups, Value: !Ref AnsibleGroups}
+              - {Key: sydney.edu.au/resTek/createdBy, Value: !Ref CreatedBy}
+              - {Key: sydney.edu.au/resTek/environment, Value: !Ref Environment}
+        UserData:
+          Fn::Base64:
+            Fn::Sub:
+              - |
+                #cloud-config
+                bootcmd:
+                - echo 'APT::Periodic::Update-Package-Lists "0";' >>/etc/apt/apt.conf.d/10periodic
+                - echo 'APT::Periodic::Unattended-Upgrade "0";' >>/etc/apt/apt.conf.d/10periodic
+                - useradd -G adm,cdrom,sudo,dip,lxd -m -s /bin/bash -U ubuntu || true
+                keyboard:
+                  layout: us
+                locale: en_AU.utf8
+                mounts:
+                - [ephemeral0, "/vol/scratch", xfs, "defaults,nofail,x-systemd.makefs", "0", "2"]
+                packages:
+                - pipx
+                package_update: true
+                package_upgrade: true
+                package_reboot_if_required: true
+                runcmd: []
+                ssh_authorized_keys: []
+                ssh_import_id: ${SSH_IMPORT_IDS}
+                ssh_pwauth: false
+                timezone: Australia/Sydney
+                users: []
+                write_files:
+                - path: /etc/apt/apt.conf.d/10periodic
+                  content: |
+                    APT::Periodic::Update-Package-Lists "1";
+                    APT::Periodic::Unattended-Upgrade "1";
+                  append: true
+                  defer: true
+              - SSH_IMPORT_IDS:
+                  Fn::ToJsonString: !Ref SshImportIds
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref InstanceRole
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ["ec2.amazonaws.com"]}
+            Action: ["sts:AssumeRole"]
+      Description: VDI instance access to resources
+      Policies:
+        - PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AllowAccountLevelS3Actions
+                Effect: Allow
+                Action:
+                  - "s3:GetBucketLocation"
+                  - "s3:GetAccountPublicAccessBlock"
+                  - "s3:ListAccessPoints"
+                  - "s3:ListAllMyBuckets"
+                Resource: "arn:aws:s3:::*"
+          PolicyName: root
+
+  DefaultSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Enable EC2 instance access"
+      GroupName: Default
+      SecurityGroupIngress:
+        - CidrIpv6: "::/0"
+          Description: "Allow SSH"
+          FromPort: "22"
+          IpProtocol: "tcp"
+          ToPort: "22"
+        - CidrIp: "0.0.0.0/0"
+          Description: "Allow SSH"
+          FromPort: "22"
+          IpProtocol: "tcp"
+          ToPort: "22"
+      VpcId: !Ref VpcId
+
+  AllowAllSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    preoperties:
+      GroupDescription: "Allow ALL between members"
+      GroupName: AllowAll
+      VpcId: !Ref VpcId
+
+  AllowAllIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow ALL between members
+      FromPort: -1
+      GroupId: !Ref AllowAllSecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref AllowAllSecurityGroup
+      ToPort: -1
