@@ -16,6 +16,7 @@ parameters:
     type: string
     default: dean_taylor_sydney_edu_au
   metadata:
+    default: {}
     type: json
   network:
     type: string
@@ -29,13 +30,17 @@ parameters:
   security_groups:
     type: json
     default: ["er01 ssh"]
-  volume_size:
+  snap_volume_size:
     type: number
-    default: 10
-  volume_type:
+    default: 0
+  snap_volume_type:
     type: string
-    default: Nirin2_General
-    #default: Nirin2_Transaction
+    default: Nirin2_Transaction
+    #default: Nirin2_General
+
+conditions:
+  has_snap_volume:
+    not: {equals: [get_param: snap_volume_size, 0]}
 
 resources:
   server:
@@ -56,9 +61,14 @@ resources:
             ${OS_PROVIDER}: {get_param: os_provider}
       image: {get_param: image}
       block_device_mapping_v2:
-      - boot_index: -1
-        delete_on_termination: true
-        volume_id: {get_resource: microk8sVolume}
+        list_concat:
+          - if:
+              - has_snap_volume
+              -
+                - boot_index: -1
+                  delete_on_termination: true
+                  volume_id: {get_resource: snapVolume}
+              - []
       networks:
       - floating_ip: {get_resource: externalIp}
         port: {get_resource: serverPort}
@@ -67,32 +77,23 @@ resources:
         str_replace:
           template: |
             #cloud-config
-            fs_setup:
-            - label: microk8s
-              filesystem: xfs
-              device: ${VOLUME_PATH}
             hostname: ${HOSTNAME}
             fqdn: ${HOSTNAME}.${DOMAIN}
             keyboard:
               layout: us
             locale: en_AU.utf8
-            mounts:
-            -
-              - ${VOLUME_PATH}
-              - /var/snap/microk8s/common
+            packages:
+              - rsync
+              - util-linux
+              - xfsprogs
             package_update: true
             package_upgrade: true
             package_reboot_if_required: true
+            runcmd:
+              - ${RUNCMD_VAR_SNAP}
             timezone: Australia/Sydney
             write_files:
-            - path: /etc/sysctl.d/99-forwarding.conf
-              content: |
-                net.ipv4.ip_forward=1
-                net.ipv6.conf.all.forwarding=1
-            - path: /etc/systemd/journald.conf.d/syslog.conf
-              content: |
-                [Journal]
-                ForwardToSyslog=no
+              ${WRITE_FILES}
           params:
             ${DOMAIN}:
               str_replace:
@@ -105,23 +106,77 @@ resources:
                 template: ip-${HOST_IP}
                 params:
                   ${HOST_IP}: {list_join: ['-', {str_split: ['.', {get_attr: [serverPort, fixed_ips, 0, ip_address]}]}]}
-            ${VOLUME_PATH}:
-              str_replace:
-                template: /dev/disk/by-id/virtio-${VOLUME_ID}
-                params:
-                  ${VOLUME_ID}:
-                    yaql:
-                      expression: $.data.volume_id.substring(0,20)
-                      data:
-                        volume_id: {get_resource: microk8sVolume}
+            ${RUNCMD_VAR_SNAP}:
+              if:
+              - has_snap_volume
+              - str_replace:
+                  template: >
+                    cloud-init-per once snapd_var_snap bash -c '
+                    DEVICE=/dev/disk/by-id/virtio-${VOLUME_ID};
+                    VAR_SNAP_DEST=/run/var_snap_e8cc6a32;
+                    blkid -p "$DEVICE" >/dev/null || mkfs.xfs "$DEVICE";
+                    mkdir -p "$VAR_SNAP_DEST";
+                    mount "$DEVICE" "$VAR_SNAP_DEST";
+                    systemctl stop snapd.service snapd.socket;
+                    rsync -a --ignore-existing /var/snap/ "${VAR_SNAP_DEST}/";
+                    umount "$VAR_SNAP_DEST";
+                    systemctl daemon-reload;
+                    systemctl start var-snap.mount;
+                    systemctl start snapd.socket snapd.service;
+                    '
+                  params:
+                    ${VOLUME_ID}:
+                      yaql:
+                        expression: $.data.volume_id.substring(0,20)
+                        data:
+                          volume_id: {get_resource: snapVolume}
+              - []
+            ${WRITE_FILES}:
+              list_concat:
+              -
+                - path: /etc/systemd/journald.conf.d/syslog.conf
+                  content: |
+                    [Journal]
+                    ForwardToSyslog=no
+              - if:
+                - has_snap_volume
+                -
+                  - path: /etc/systemd/system/var-snap.mount
+                    content:
+                      str_replace:
+                        template: |
+                          [Unit]
+                          Description=Mount unit to segregate snap operations to separate storage
+                          After=snapd.mounts-pre.target
+                          Before=snapd.mounts.target
+                          [Mount]
+                          What=/dev/disk/by-id/virtio-${VOLUME_ID}
+                          Where=/var/snap
+                          Type=xfs
+                          [Install]
+                          WantedBy=snapd.mounts.target
+                          WantedBy=multi-user.target
+                        params:
+                          ${VOLUME_ID}:
+                            yaql:
+                              expression: $.data.volume_id.substring(0,20)
+                              data:
+                                volume_id: {get_resource: snapVolume}
+                  - path: /etc/systemd/system/snapd.service.d/wait4varSnapMount.conf
+                    content: |
+                      [Unit]
+                      After=var-snap.mount
+                      Requires=var-snap.mount
+                - []
       user_data_format: RAW
       user_data_update_policy: IGNORE
 
-  microk8sVolume:
+  snapVolume:
+    condition: has_snap_volume
     type: OS::Cinder::Volume
     properties:
-      size: {get_param: volume_size}
-      volume_type: {get_param: volume_type}
+      size: {get_param: snap_volume_size}
+      volume_type: {get_param: snap_volume_type}
 
   externalIp:
     type: OS::Neutron::FloatingIP
