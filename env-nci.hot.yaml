@@ -1,0 +1,7 @@
+parameter_defaults:
+  flavor: c3.8c16m10d
+  floating_network: external
+  image: Ubuntu Noble Server 2025-08-05
+  os_provider: nci
+  snap_volume_size: 20
+  snap_volume_type: Nirin2_Transaction

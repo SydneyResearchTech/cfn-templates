@@ -4,39 +4,39 @@ description: >
 
 parameters:
   flavor:
-    type: string
     default: c3.8c16m10d
+    description: openstack flavor list
+    type: string
   floating_network:
-    type: string
     default: external
+    description: openstack network list
+    type: string
   image:
+    description: openstack image list --status active
     type: string
-    default: Ubuntu Noble Server 2024-10-04
   key_name:
+    description: openstack keypair list
     type: string
-    default: dean_taylor_sydney_edu_au
   metadata:
     default: {}
     type: json
   network:
+    description: openstack network list
     type: string
-    default: er01
   os_project:
+    description: openstack project list
     type: string
-    default: er01
   os_provider:
     type: string
-    default: nci
   security_groups:
+    description: openstack security group list
     type: json
-    default: ["er01 ssh"]
   snap_volume_size:
-    type: number
     default: 0
+    type: number
   snap_volume_type:
+    description: openstack volume type list
     type: string
-    default: Nirin2_Transaction
-    #default: Nirin2_General
 
 conditions:
   has_snap_volume:
