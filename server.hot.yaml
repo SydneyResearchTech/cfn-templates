@@ -3,8 +3,11 @@ description: >
   Ubuntu server deployment
 
 parameters:
+  availability_zone:
+    description: openstack availability zone list
+    type: string
   flavor:
-    default: c3.8c16m10d
+    default: t3.xsmall
     description: openstack flavor list
     type: string
   floating_network:
@@ -35,6 +38,7 @@ parameters:
     default: 0
     type: number
   snap_volume_type:
+    default: standard
     description: openstack volume type list
     type: string
 
@@ -47,6 +51,7 @@ resources:
     type: OS::Nova::Server
     properties:
       flavor: {get_param: flavor}
+      availability_zone: {get_param: availability_zone}
       key_name: {get_param: key_name}
       metadata:
         map_merge:
