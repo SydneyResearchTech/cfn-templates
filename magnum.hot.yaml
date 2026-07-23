@@ -1,0 +1,492 @@
+heat_template_version: 2021-04-16
+# openstack stack create --parameter cluster_name=textv9 -t magnum.hot.yaml testv9
+description: >-
+  Magnum cluster pre-bootstrap
+
+parameters:
+  availability_zone:
+    default: ardc-syd-1
+    description: OpenStack availability zone for deployment
+    type: string
+  domain:
+    default: cloud.edu.au
+    description: Domain zone for resolution and resource names
+    type: string
+  flavor:
+    default: t3.xsmall
+    description: Server resource flavor for bastion host
+    type: string
+  cidr:
+    default: 10.10.10.0/24
+    description: IP address CIDR for IPv4 subnet
+    type: string
+  cidr6:
+    default: fd8f:f96a:47c3::/64
+    description: IP address CIDR for IPv6 subnet
+    type: string
+  dns_nameservers:
+    default: ["202.158.207.1", "202.158.207.2"]
+    description: Upstream domain name servers
+    type: json
+  ethertype:
+    default: IPv4
+    description: Primary ethernet type IPv4 or IPv6
+    type: string
+  image:
+    default: NeCTAR Ubuntu 26.04 LTS (Resolute) amd64
+    description: Server image for bastion host
+    type: string
+  key_name:
+    description: SSH keypair used for remote access
+    type: string
+  network_external:
+    default: ardc-syd
+    type: string
+
+outputs:
+  network:
+    description: Magnum cluster network ID
+    value: {get_resource: network}
+  server_ip:
+    description: Servers primary IP address
+    value:
+      get_attr:
+        - bastion
+        - addresses
+        - str_replace:
+            template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}
+            params:
+              ${CLUSTER_NAME}: {get_param: OS::stack_name}
+  subnet:
+    description: Magnum cluster subnet IPv4
+    value: {get_resource: subnet4}
+  subnet6:
+    description: Magnum cluster subnet IPv6
+    value: {get_resource: subnet6}
+  sg_controlplane:
+    description: Magnum cluster security group control plane nodes
+    value: {get_resource: sg_controlplane}
+  sg_worker:
+    description: Magnum cluster security group worker nodes
+    value: {get_resource: sg_worker}
+
+resources:
+  bastion:
+    type: OS::Nova::Server
+    properties:
+      flavor: {get_param: flavor}
+      availability_zone: {get_param: availability_zone}
+      image: {get_param: image}
+      key_name: {get_param: key_name}
+      metadata: {}
+      name:
+        str_replace:
+          template: ${CLUSTER_NAME}-bastion.${DNS_DOMAIN}
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+            ${DNS_DOMAIN}: {get_param: domain}
+      networks:
+        - floating_ip: {get_resource: floating_ip}
+          port: {get_resource: server_port}
+      tags: []
+      user_data:
+        str_replace:
+          template: |
+            #cloud-config
+            fqdn: ${CLUSTER_NAME}-bastion.${DNS_DOMAIN}
+            keyboard:
+              layout: us
+            locale: en_AU.utf8
+            packages:
+            - tayga
+            - unbound
+            package_update: true
+            package_upgrade: true
+            package_reboot_if_required: true
+            timezone: Australia/Sydney
+            write_files:
+            - path: /etc/sysctl.d/ipv4_ip_forward.conf
+              content: |
+                net.ipv4.ip_forward = 1
+            - path: /etc/tayga.conf
+              content: |
+                tun-device nat64
+                ipv4-addr 100.64.0.1
+                prefix 64:ff9b:1::/96
+                dynamic-pool 100.64.0.0/10
+            - path: /etc/systemd/resolved.conf.d/DNSStubListener.conf
+              content: |
+                [Resolve]
+                DNS=::1
+                DNSStubListener=no
+            - path: /etc/unbound/unbound.conf.d/local.conf
+              content: |
+                server:
+                    interface: ::0
+                    interface: 0.0.0.0
+                    access-control: fc00::/7 allow
+                    access-control: 10.0.0.0/8 allow
+                    access-control: 172.16.0.0/12 allow
+                    access-control: 192.168.0.0/16 allow
+                    dns64-prefix: 64:ff9b::/96
+                    dns64-synthall: yes
+                    module-config: "dns64 validator iterator"
+                    prefer-ip6: yes
+                forward-zone:
+                    name: "."
+                    forward-addr: 202.158.207.1
+                    forward-addr: 202.158.207.2
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+            ${DNS_DOMAIN}: {get_param: domain}
+      user_data_format: RAW
+      user_data_update_policy: IGNORE
+
+  floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: {get_param: network_external}
+
+  server_port:
+    type: OS::Neutron::Port
+    properties:
+      network: {get_resource: network}
+      admin_state_up: true
+      port_security_enabled: true
+      security_groups:
+        - {get_resource: sg_bastion}
+
+  network:
+    type: OS::Neutron::Net
+    properties:
+      # availability_zone_hints:
+      #   - {get_param: availability_zone}
+      dns_domain:
+        str_replace:
+          template: ${CLUSTER_NAME}.ais-fedlearn.cloud.edu.au.
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+      name:
+        str_replace:
+          template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+
+  subnet4:
+    type: OS::Neutron::Subnet
+    properties:
+      network: {get_resource: network}
+      cidr: {get_param: cidr}
+      dns_nameservers: {get_param: dns_nameservers}
+      enable_dhcp: true
+      ip_version: 4
+      name:
+        str_replace:
+          template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+
+  subnet6:
+    type: OS::Neutron::Subnet
+    properties:
+      network: {get_resource: network}
+      cidr: {get_param: cidr6}
+      dns_nameservers: []
+      enable_dhcp: true
+      ip_version: 6
+      ipv6_address_mode: slaac
+      ipv6_ra_mode: slaac
+      name:
+        str_replace:
+          template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}-v6
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+
+  router:
+    type: OS::Neutron::Router
+    properties:
+      admin_state_up: true
+      # availability_zone_hints:
+      #   - {get_param: availability_zone}
+      external_gateway_info:
+        enable_snat: true
+        network: {get_param: network_external}
+      name:
+        str_replace:
+          template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+
+  router_if:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: {get_resource: router}
+      subnet: {get_resource: subnet4}
+
+  router_if6:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: {get_resource: router}
+      subnet: {get_resource: subnet6}
+
+  sg_bastion:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: Cluster API non-managed group bastion
+      name:
+        str_replace:
+          template: k8s-cluster-magnum-${CLUSTER_NAME}-secgroup-bastion
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+      rules:
+        - ethertype: IPv4
+          port_range_max: 22
+          port_range_min: 22
+          protocol: tcp
+          remote_ip_prefix: 0.0.0.0/0
+
+  sg_controlplane:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: Cluster API non-managed group
+      name:
+        str_replace:
+          template: k8s-cluster-magnum-${CLUSTER_NAME}-secgroup-controlplane
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+      rules:
+        # description: Kubernetes API server (All)
+        - ethertype: {get_param: ethertype}
+          port_range_max: 6443
+          port_range_min: 6443
+          protocol: tcp
+          remote_mode: remote_group_id
+        # description: etcd server client API (kube-apiserver, etcd)
+        - ethertype: {get_param: ethertype}
+          port_range_max: 2380
+          port_range_min: 2379
+          protocol: tcp
+          remote_mode: remote_group_id
+        # description: Kubelet API (Self, Control plane)
+        - ethertype: {get_param: ethertype}
+          port_range_max: 10250
+          port_range_min: 10250
+          protocol: tcp
+          remote_mode: remote_group_id
+        # description: Bastion access
+        - ethertype: IPv6
+          port_range_max: 22
+          port_range_min: 22
+          protocol: tcp
+          remote_group_id: {get_resource: sg_bastion}
+          remote_mode: remote_group_id
+        # description: Bastion access
+        - ethertype: IPv4
+          port_range_max: 22
+          port_range_min: 22
+          protocol: tcp
+          remote_group_id: {get_resource: sg_bastion}
+          remote_mode: remote_group_id
+        # description: Calico networking (BGP)
+        - ethertype: {get_param: ethertype}
+          port_range_max: 179
+          port_range_min: 179
+          protocol: tcp
+          remote_mode: remote_group_id
+        # description: Calico networking with IP-in-IP
+        - ethertype: {get_param: ethertype}
+          protocol: 4
+          remote_mode: remote_group_id
+        # description: Calico networking with VXLAN
+        - ethertype: {get_param: ethertype}
+          port_range_max: 4789
+          port_range_min: 4789
+          protocol: udp
+          remote_mode: remote_group_id
+        # description: Calico networking with IPv4 WireGuard
+        - ethertype: IPv4
+          port_range_max: 51820
+          port_range_min: 51820
+          protocol: udp
+          remote_mode: remote_group_id
+        # description: Calico networking with IPv6 Wireguard
+        - ethertype: IPv6
+          port_range_max: 51821
+          port_range_min: 51821
+          protocol: udp
+          remote_mode: remote_group_id
+
+  sg_worker:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: Cluster API non-managed group
+      name:
+        str_replace:
+          template: k8s-cluster-magnum-${CLUSTER_NAME}-secgroup-worker
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+      rules:
+        # description: Kubelet API (Self, Control plane)
+        - ethertype: {get_param: ethertype}
+          port_range_max: 10250
+          port_range_min: 10250
+          protocol: tcp
+          remote_group_id: {get_resource: sg_controlplane}
+          remote_mode: remote_group_id
+        # description: kube-proxy (Self, Load balancers)
+        - ethertype: {get_param: ethertype}
+          port_range_max: 10256
+          port_range_min: 10256
+          protocol: tcp
+          remote_mode: remote_group_id
+        # description: NodePort Services (All)
+        - ethertype: {get_param: ethertype}
+          port_range_max: 32767
+          port_range_min: 30000
+          protocol: tcp
+          remote_mode: remote_group_id
+        # description: NodePort Services (All)
+        - ethertype: {get_param: ethertype}
+          port_range_max: 32767
+          port_range_min: 30000
+          protocol: udp
+          remote_mode: remote_group_id
+        # description: Bastion access
+        - ethertype: IPv6
+          port_range_max: 22
+          port_range_min: 22
+          protocol: tcp
+          remote_group_id: {get_resource: sg_bastion}
+          remote_mode: remote_group_id
+        # description: Bastion access
+        - ethertype: IPv4
+          port_range_max: 22
+          port_range_min: 22
+          protocol: tcp
+          remote_group_id: {get_resource: sg_bastion}
+          remote_mode: remote_group_id
+        # description: Calico networking (BGP)
+        - ethertype: {get_param: ethertype}
+          port_range_max: 179
+          port_range_min: 179
+          protocol: tcp
+          remote_mode: remote_group_id
+        # description: Calico networking (BGP)
+        - ethertype: {get_param: ethertype}
+          port_range_max: 179
+          port_range_min: 179
+          protocol: tcp
+          remote_group_id: {get_resource: sg_controlplane}
+          remote_mode: remote_group_id
+        # description: Calico networking with IP-in-IP
+        - ethertype: {get_param: ethertype}
+          protocol: 4
+          remote_mode: remote_group_id
+        # description: Calico networking with IP-in-IP
+        - ethertype: {get_param: ethertype}
+          protocol: 4
+          remote_group_id: {get_resource: sg_controlplane}
+          remote_mode: remote_group_id
+        # description: Calico networking with VXLAN
+        - ethertype: {get_param: ethertype}
+          port_range_max: 4789
+          port_range_min: 4789
+          protocol: udp
+          remote_mode: remote_group_id
+        # description: Calico networking with VXLAN
+        - ethertype: {get_param: ethertype}
+          port_range_max: 4789
+          port_range_min: 4789
+          protocol: udp
+          remote_group_id: {get_resource: sg_controlplane}
+          remote_mode: remote_group_id
+        # description: Calico networking with IPv4 WireGuard
+        - ethertype: {get_param: ethertype}
+          port_range_max: 51820
+          port_range_min: 51820
+          protocol: udp
+          remote_mode: remote_group_id
+        # description: Calico networking with IPv4 WireGuard
+        - ethertype: {get_param: ethertype}
+          port_range_max: 51820
+          port_range_min: 51820
+          protocol: udp
+          remote_group_id: {get_resource: sg_controlplane}
+          remote_mode: remote_group_id
+        # description: Calico networking with IPv6 Wireguard
+        - ethertype: IPv6
+          port_range_max: 51821
+          port_range_min: 51821
+          protocol: udp
+          remote_mode: remote_group_id
+        # description: Calico networking with IPv6 Wireguard
+        - ethertype: IPv6
+          port_range_max: 51821
+          port_range_min: 51821
+          protocol: udp
+          remote_group_id: {get_resource: sg_controlplane}
+          remote_mode: remote_group_id
+
+  sgr_apiserver:
+    type: OS::Neutron::SecurityGroupRule
+    properties:
+      security_group: {get_resource: sg_controlplane}
+      description: Kubernetes API server (All)
+      ethertype: {get_param: ethertype}
+      port_range_max: 6443
+      port_range_min: 6443
+      protocol: tcp
+      remote_group: {get_resource: sg_worker}
+
+  sgr_calicobgp:
+    type: OS::Neutron::SecurityGroupRule
+    properties:
+      security_group: {get_resource: sg_controlplane}
+      description: Calico networking (BGP)
+      ethertype: {get_param: ethertype}
+      port_range_max: 179
+      port_range_min: 179
+      protocol: tcp
+      remote_group: {get_resource: sg_worker}
+
+  sgr_calicobgp:
+    type: OS::Neutron::SecurityGroupRule
+    properties:
+      security_group: {get_resource: sg_controlplane}
+      description: Calico networking with IP-in-IP
+      ethertype: {get_param: ethertype}
+      protocol: 4
+      remote_group: {get_resource: sg_worker}
+
+  sgr_calicovxlan:
+    type: OS::Neutron::SecurityGroupRule
+    properties:
+      security_group: {get_resource: sg_controlplane}
+      description: Calico networking with VXLAN
+      ethertype: {get_param: ethertype}
+      port_range_max: 4789
+      port_range_min: 4789
+      protocol: udp
+      remote_group: {get_resource: sg_worker}
+
+  sgr_calicov4wg:
+    type: OS::Neutron::SecurityGroupRule
+    properties:
+      security_group: {get_resource: sg_controlplane}
+      description: Calico networking with IPv4 WireGuard
+      ethertype: {get_param: ethertype}
+      port_range_max: 51820
+      port_range_min: 51820
+      protocol: udp
+      remote_group: {get_resource: sg_worker}
+
+  sgr_calicov4wg:
+    type: OS::Neutron::SecurityGroupRule
+    properties:
+      security_group: {get_resource: sg_controlplane}
+      description: Calico networking with IPv6 Wireguard
+      ethertype: IPv6
+      port_range_max: 51821
+      port_range_min: 51821
+      protocol: udp
+      remote_group: {get_resource: sg_worker}
