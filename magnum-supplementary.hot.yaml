@@ -1,0 +1,85 @@
+heat_template_version: 2021-04-16
+description: OpenStack Magnum cluster additional configuration.
+
+parameters:
+  availability_zone:
+    default: ardc-syd-1
+    type: string
+  flavor:
+    default: p3.xsmall
+    type: string
+  image:
+    default: NeCTAR Ubuntu 26.04 LTS (Resolute) amd64
+    description: Bastion image
+    type: string
+  key_name:
+    description: SSH key name for server access
+    type: string
+  network:
+    description: Magnum network name or id
+    type: string
+  oidc_container_name:
+    default: oidc-discovery
+    description: Public object store name for Magnum cluster OIDC discovery files
+    type: string
+
+resources:
+  bastion:
+    type: OS::Nova::Server
+    properties:
+      flavor: {get_param: flavor}
+      availability_zone: {get_param: availability_zone}
+      key_name: {get_param: key_name}
+      name: {list_join: ["-", [{get_param: OS::stack_name}, "bastion"]]}
+      image: {get_param: image}
+      networks:
+        - floating_ip: {get_resource: bastionExternalIp}
+          port: {get_resource: bastionPort}
+
+  bastionPort:
+    type: OS::Neutron::Port
+    properties:
+      network: {get_param: network}
+      admin_state_up: true
+      port_security_enabled: true
+      security_groups: {get_resource: bastionSG}
+
+  bastionSG:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - ethertype: IPv6
+          port_range_max: 22
+          port_range_min: 22
+          protocol: tcp
+          remote_ip_prefix: '::/0'
+        - port_range_max: 22
+          port_range_min: 22
+          protocol: tcp
+          remote_ip_prefix: 0.0.0.0/0
+
+  bastionExternalIp:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: {get_param: external_network}
+
+  oidcContainer:
+    type: OS::Swift::Container
+    properties:
+      PurgeOnDelete: true
+      X-Container-Read: ".r:*,.rlistings"
+      name: {get_param: oidc_container_name}
+
+outputs:
+  bastion_hostname:
+    description: Bastion hostname
+    value: {get_attr: [bastion, name]}
+  bastion_ip:
+    description: Bastion IP address
+    value: {get_attr: [bastionExternalIp, floating_ip_address]}
+  oidc_container_name:
+    description: Name of public swift container
+    value: {get_resource: oidcContainer}
+  oidc_container_uri:
+    description: Public url of the container
+    value: {get_attr: [oidcContainer, smap_domain]}
