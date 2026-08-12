@@ -22,6 +22,10 @@ parameters:
     default: oidc-discovery
     description: Public object store name for Magnum cluster OIDC discovery files
     type: string
+  timezone:
+    default: Australia/Sydney
+    description: Local timezone
+    type: string
 
 resources:
   bastion:
@@ -35,6 +39,21 @@ resources:
       networks:
         - floating_ip: {get_resource: bastionExternalIp}
           port: {get_resource: bastionPort}
+      user_data:
+        str_replace:
+          template: |
+            #cloud-config
+            keyboard:
+              layout: us
+            locale: en_AU.utf8
+            package_update: true
+            package_upgrade: true
+            package_reboot_if_required: true
+            timezone: ${TIMEZONE}
+          params:
+            ${TIMEZONE}: {get_param: timezone}
+      user_data_format: RAW
+      user_data_update_policy: IGNORE
 
   bastionPort:
     type: OS::Neutron::Port
