@@ -37,18 +37,29 @@ parameters:
     description: Server image for bastion host
     type: string
   key_name:
+    default: ""
     description: SSH keypair used for remote access
     type: string
   network_external:
     default: ardc-syd
     type: string
 
+conditions:
+  bastion_enabled: {not: {equals: [{get_param: key_name}, ""]}}
+
 outputs:
   network:
     description: Magnum cluster network ID
     value: {get_resource: network}
+  subnet:
+    description: Magnum cluster subnet IPv4
+    value: {get_resource: subnet4}
+  subnet6:
+    description: Magnum cluster subnet IPv6
+    value: {get_resource: subnet6}
   server_ip:
     description: Servers primary IP address
+    condition: bastion_enabled
     value:
       get_attr:
         - bastion
@@ -57,22 +68,113 @@ outputs:
             template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}
             params:
               ${CLUSTER_NAME}: {get_param: OS::stack_name}
-  subnet:
-    description: Magnum cluster subnet IPv4
-    value: {get_resource: subnet4}
-  subnet6:
-    description: Magnum cluster subnet IPv6
-    value: {get_resource: subnet6}
   sg_controlplane:
     description: Magnum cluster security group control plane nodes
+    condition: bastion_enabled
     value: {get_resource: sg_controlplane}
   sg_worker:
     description: Magnum cluster security group worker nodes
+    condition: bastion_enabled
     value: {get_resource: sg_worker}
 
 resources:
+  network:
+    type: OS::Neutron::Net
+    properties:
+      # availability_zone_hints:
+      #   - {get_param: availability_zone}
+      dns_domain:
+        str_replace:
+          template: ${CLUSTER_NAME}.ais-fedlearn.cloud.edu.au.
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+      name:
+        str_replace:
+          template: k8s-clusterapi-cluster-${CLUSTER_NAME}
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+      tags:
+        - str_replace:
+            template: infrastructure.cluster.x-k8s.io/cluster=${CLUSTER_NAME}
+            params:
+              ${CLUSTER_NAME}: {get_param: OS::stack_name}
+
+  subnet4:
+    type: OS::Neutron::Subnet
+    properties:
+      network: {get_resource: network}
+      cidr: {get_param: cidr}
+      dns_nameservers: {get_param: dns_nameservers}
+      enable_dhcp: true
+      ip_version: 4
+      name:
+        str_replace:
+          template: k8s-clusterapi-cluster-${CLUSTER_NAME}
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+      tags:
+        - str_replace:
+            template: infrastructure.cluster.x-k8s.io/cluster=${CLUSTER_NAME}
+            params:
+              ${CLUSTER_NAME}: {get_param: OS::stack_name}
+        - "infrastructure.cluster.x-k8s.io/primary=true"
+
+  subnet6:
+    type: OS::Neutron::Subnet
+    properties:
+      network: {get_resource: network}
+      cidr: {get_param: cidr6}
+      dns_nameservers: []
+      enable_dhcp: true
+      ip_version: 6
+      ipv6_address_mode: slaac
+      ipv6_ra_mode: slaac
+      name:
+        str_replace:
+          template: k8s-clusterapi-cluster-${CLUSTER_NAME}
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+      tags:
+        - str_replace:
+            template: infrastructure.cluster.x-k8s.io/cluster=${CLUSTER_NAME}
+            params:
+              ${CLUSTER_NAME}: {get_param: OS::stack_name}
+
+  router:
+    type: OS::Neutron::Router
+    properties:
+      admin_state_up: true
+      # availability_zone_hints:
+      #   - {get_param: availability_zone}
+      external_gateway_info:
+        enable_snat: true
+        network: {get_param: network_external}
+      name:
+        str_replace:
+          template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}
+          params:
+            ${CLUSTER_NAME}: {get_param: OS::stack_name}
+      tags:
+        - str_replace:
+            template: infrastructure.cluster.x-k8s.io/cluster=${CLUSTER_NAME}
+            params:
+              ${CLUSTER_NAME}: {get_param: OS::stack_name}
+
+  router_if:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: {get_resource: router}
+      subnet: {get_resource: subnet4}
+
+  router_if6:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: {get_resource: router}
+      subnet: {get_resource: subnet6}
+
   bastion:
     type: OS::Nova::Server
+    condition: bastion_enabled
     properties:
       flavor: {get_param: flavor}
       availability_zone: {get_param: availability_zone}
@@ -144,11 +246,13 @@ resources:
 
   floating_ip:
     type: OS::Neutron::FloatingIP
+    condition: bastion_enabled
     properties:
       floating_network: {get_param: network_external}
 
   server_port:
     type: OS::Neutron::Port
+    condition: bastion_enabled
     properties:
       network: {get_resource: network}
       admin_state_up: true
@@ -156,81 +260,9 @@ resources:
       security_groups:
         - {get_resource: sg_bastion}
 
-  network:
-    type: OS::Neutron::Net
-    properties:
-      # availability_zone_hints:
-      #   - {get_param: availability_zone}
-      dns_domain:
-        str_replace:
-          template: ${CLUSTER_NAME}.ais-fedlearn.cloud.edu.au.
-          params:
-            ${CLUSTER_NAME}: {get_param: OS::stack_name}
-      name:
-        str_replace:
-          template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}
-          params:
-            ${CLUSTER_NAME}: {get_param: OS::stack_name}
-
-  subnet4:
-    type: OS::Neutron::Subnet
-    properties:
-      network: {get_resource: network}
-      cidr: {get_param: cidr}
-      dns_nameservers: {get_param: dns_nameservers}
-      enable_dhcp: true
-      ip_version: 4
-      name:
-        str_replace:
-          template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}
-          params:
-            ${CLUSTER_NAME}: {get_param: OS::stack_name}
-
-  subnet6:
-    type: OS::Neutron::Subnet
-    properties:
-      network: {get_resource: network}
-      cidr: {get_param: cidr6}
-      dns_nameservers: []
-      enable_dhcp: true
-      ip_version: 6
-      ipv6_address_mode: slaac
-      ipv6_ra_mode: slaac
-      name:
-        str_replace:
-          template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}-v6
-          params:
-            ${CLUSTER_NAME}: {get_param: OS::stack_name}
-
-  router:
-    type: OS::Neutron::Router
-    properties:
-      admin_state_up: true
-      # availability_zone_hints:
-      #   - {get_param: availability_zone}
-      external_gateway_info:
-        enable_snat: true
-        network: {get_param: network_external}
-      name:
-        str_replace:
-          template: k8s-clusterapi-cluster-magnum-${CLUSTER_NAME}
-          params:
-            ${CLUSTER_NAME}: {get_param: OS::stack_name}
-
-  router_if:
-    type: OS::Neutron::RouterInterface
-    properties:
-      router: {get_resource: router}
-      subnet: {get_resource: subnet4}
-
-  router_if6:
-    type: OS::Neutron::RouterInterface
-    properties:
-      router: {get_resource: router}
-      subnet: {get_resource: subnet6}
-
   sg_bastion:
     type: OS::Neutron::SecurityGroup
+    condition: bastion_enabled
     properties:
       description: Cluster API non-managed group bastion
       name:
@@ -247,6 +279,7 @@ resources:
 
   sg_controlplane:
     type: OS::Neutron::SecurityGroup
+    condition: bastion_enabled
     properties:
       description: Cluster API non-managed group
       name:
@@ -318,6 +351,7 @@ resources:
 
   sg_worker:
     type: OS::Neutron::SecurityGroup
+    condition: bastion_enabled
     properties:
       description: Cluster API non-managed group
       name:
@@ -429,6 +463,7 @@ resources:
 
   sgr_apiserver:
     type: OS::Neutron::SecurityGroupRule
+    condition: bastion_enabled
     properties:
       security_group: {get_resource: sg_controlplane}
       description: Kubernetes API server (All)
@@ -440,6 +475,7 @@ resources:
 
   sgr_calicobgp:
     type: OS::Neutron::SecurityGroupRule
+    condition: bastion_enabled
     properties:
       security_group: {get_resource: sg_controlplane}
       description: Calico networking (BGP)
@@ -451,6 +487,7 @@ resources:
 
   sgr_calicobgp:
     type: OS::Neutron::SecurityGroupRule
+    condition: bastion_enabled
     properties:
       security_group: {get_resource: sg_controlplane}
       description: Calico networking with IP-in-IP
@@ -460,6 +497,7 @@ resources:
 
   sgr_calicovxlan:
     type: OS::Neutron::SecurityGroupRule
+    condition: bastion_enabled
     properties:
       security_group: {get_resource: sg_controlplane}
       description: Calico networking with VXLAN
@@ -471,6 +509,7 @@ resources:
 
   sgr_calicov4wg:
     type: OS::Neutron::SecurityGroupRule
+    condition: bastion_enabled
     properties:
       security_group: {get_resource: sg_controlplane}
       description: Calico networking with IPv4 WireGuard
@@ -482,6 +521,7 @@ resources:
 
   sgr_calicov4wg:
     type: OS::Neutron::SecurityGroupRule
+    condition: bastion_enabled
     properties:
       security_group: {get_resource: sg_controlplane}
       description: Calico networking with IPv6 Wireguard

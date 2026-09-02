@@ -95,7 +95,7 @@ Resources:
           Fn::Base64: |
             #cloud-config
             ansible:
-              install_method: pip
+              install_method: distro
               ansible_config: /etc/ansible/ansible.cfg
               package_name: ansible
               run_user: ubuntu
@@ -107,6 +107,10 @@ Resources:
               galaxy:
                 actions:
                   - ["ansible-galaxy","install","-r","/etc/ansible/requirements.yml"]
+            apt:
+              sources:
+                ansible:
+                  source: ppa:ansible/ansible
             bootcmd:
             - echo 'APT::Periodic::Update-Package-Lists "0";' >/etc/apt/apt.conf.d/99auto-upgrades
             - echo 'APT::Periodic::Download-Upgradeable-Packages "0";' >>/etc/apt/apt.conf.d/99auto-upgrades
