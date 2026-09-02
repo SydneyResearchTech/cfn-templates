@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Triggers a Lambda function via EventBridge when a new S3 bucket is created.
+  The handler assignes access permissions via pod identity association for EKS service account.
+
+Resources:
+  # IAM Execution Role for the Lambda Function
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2010-09-09'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  S3BucketDetectorLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: S3BucketCreationDetector
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.12
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import boto3
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          eks = boto3.client('eks')
+          def lambda_handler(event, context):
+              try:
+                  detail = event.get('detail', {})
+                  bucket_name = detail.get('requestParameters', {}).get('bucketName')
+                  creator = detail.get('userIdentity', {}).get('arn')
+                  logger.info(f"New S3 Bucket Detected: {bucket_name}")
+                  logger.info(f"Created by: {creator}")
+                  return {"statusCode": 200, "body": json.dumps("Association created successfully")}
+              except Exception as e:
+                  logger.error(f"Error: {str(e)}")
+                  raise e
+
+  # EventBridge Rule filtering for S3 CreateBucket via CloudTrail
+  EventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: CaptureS3CreateBucket
+      Description: 'Matches S3 CreateBucket management API calls from CloudTrail.'
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+            - s3.amazonaws.com
+          eventName:
+            - CreateBucket
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt S3BucketDetectorLambda.Arn
+          Id: S3CreateBucketTargetLambdaFunction
+
+  # Permission for EventBridge to invoke the Lambda Function
+  LambdaPermissionForEventBridge:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref S3BucketDetectorLambda
+      Action: lambda:InvokeFunction
+      Principal: ://amazonaws.com
+      SourceArn: !GetAtt EventBridgeRule.Arn
+
+Outputs:
+  LambdaFunctionArn:
+    Description: 'ARN of the created Lambda Function'
+    Value: !GetAtt S3BucketDetectorLambda.Arn
