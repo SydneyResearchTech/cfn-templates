@@ -75,7 +75,7 @@ Resources:
     Properties:
       FunctionName: !Ref S3BucketDetectorLambda
       Action: lambda:InvokeFunction
-      Principal: ://amazonaws.com
+      Principal: events.amazonaws.com
       SourceArn: !GetAtt EventBridgeRule.Arn
 
 Outputs:
