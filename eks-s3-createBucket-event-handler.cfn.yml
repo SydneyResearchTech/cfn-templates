@@ -43,6 +43,18 @@ Resources:
                   creator = detail.get('userIdentity', {}).get('arn')
                   logger.info(f"New S3 Bucket Detected: {bucket_name}")
                   logger.info(f"Created by: {creator}")
+                  policy_document = {
+                      "Version": "2012-10-17",
+                      "Statement": [{
+                          "Effect": "Allow",
+                          "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
+                          "Resource": [
+                              f"arn:aws:s3:::{bucket_name}",
+                              f"arn:aws:s3:::{bucket_name}/*"
+                          ]
+                      }]
+                  }
+                  # response = eks.create_pod_identity_association( ...
                   return {"statusCode": 200, "body": json.dumps("Association created successfully")}
               except Exception as e:
                   logger.error(f"Error: {str(e)}")
