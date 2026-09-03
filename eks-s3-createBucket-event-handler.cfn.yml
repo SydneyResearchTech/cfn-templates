@@ -54,7 +54,14 @@ Resources:
                           ]
                       }]
                   }
-                  # response = eks.create_pod_identity_association( ...
+                  # response = eks.create_pod_identity_association(
+                  #     clusterName=cluster_name,
+                  #     roleArn=role_arn,
+                  #     namespace=namespace,
+                  #     serviceAccount=service_account,
+                  #     associationScope='Cluster',
+                  #     issuer='aws',
+                  # )
                   return {"statusCode": 200, "body": json.dumps("Association created successfully")}
               except Exception as e:
                   logger.error(f"Error: {str(e)}")
